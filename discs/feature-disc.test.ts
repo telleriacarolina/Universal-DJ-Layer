@@ -202,6 +202,29 @@ describe('FeatureDisc', () => {
       }
     });
 
+    test('100% rollout truly includes all users (statistical verification)', () => {
+      const disc = new FeatureDisc({
+        name: 'test',
+        features: {
+          feature1: {
+            enabled: true,
+            rolloutPercentage: 100,
+          },
+        },
+      });
+
+      let enabledCount = 0;
+      const totalUsers = 1000;
+      
+      for (let i = 0; i < totalUsers; i++) {
+        if (disc.isFeatureEnabled('feature1', `user${i}`)) {
+          enabledCount++;
+        }
+      }
+
+      expect(enabledCount).toBe(totalUsers);
+    });
+
     test('same user gets different results for different features', () => {
       const disc = new FeatureDisc({
         name: 'test',

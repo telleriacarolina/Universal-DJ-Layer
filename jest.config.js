@@ -14,6 +14,7 @@ module.exports = {
     '!discs/**/*.test.ts',
     '!src/**/__tests__/**',
     '!core/**/__tests__/**',
-    '!audit/**/__tests__/**'
+    '!audit/**/__tests__/**',
+    '!discs/**/__tests__/**'
   ]
 };

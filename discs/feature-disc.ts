@@ -135,6 +135,17 @@ export class FeatureDisc implements Disc {
   }
 
   /**
+   * Compare two arrays for equality (order-independent)
+   * @private
+   */
+  private arraysEqual(a: any[], b: any[]): boolean {
+    if (a.length !== b.length) return false;
+    const sortedA = [...a].sort();
+    const sortedB = [...b].sort();
+    return sortedA.every((val, idx) => val === sortedB[idx]);
+  }
+
+  /**
    * Preview feature flag changes without applying
    * @param context - Context object to preview against
    * @returns Preview object showing changes
@@ -159,9 +170,9 @@ export class FeatureDisc implements Disc {
         const hasChanges = 
           currentState.enabled !== normalizedState.enabled ||
           currentState.rolloutPercentage !== normalizedState.rolloutPercentage ||
-          JSON.stringify(currentState.allowlist || []) !== JSON.stringify(normalizedState.allowlist || []) ||
-          JSON.stringify(currentState.denylist || []) !== JSON.stringify(normalizedState.denylist || []) ||
-          JSON.stringify(currentState.dependencies || []) !== JSON.stringify(normalizedState.dependencies || []);
+          !this.arraysEqual(currentState.allowlist || [], normalizedState.allowlist || []) ||
+          !this.arraysEqual(currentState.denylist || [], normalizedState.denylist || []) ||
+          !this.arraysEqual(currentState.dependencies || [], normalizedState.dependencies || []);
 
         if (hasChanges) {
           changes[featureKey] = {
@@ -275,7 +286,7 @@ export class FeatureDisc implements Disc {
     // Check rollout percentage if defined
     if (normalizedState.rolloutPercentage !== undefined) {
       const userHash = this.hashUser(userId, featureKey);
-      return userHash < normalizedState.rolloutPercentage;
+      return userHash <= normalizedState.rolloutPercentage;
     }
 
     // Default to base enabled state
@@ -440,7 +451,7 @@ export class FeatureDisc implements Disc {
   }
 
   /**
-   * Hash a user ID to a deterministic value 0-99 using djb2 algorithm
+   * Hash a user ID to a deterministic value 0-100 using djb2 algorithm
    * @private
    */
   private hashUser(userId: string, featureKey: string): number {
@@ -451,7 +462,7 @@ export class FeatureDisc implements Disc {
       hash = ((hash << 5) + hash) + combined.charCodeAt(i);
     }
     
-    return Math.abs(hash) % 100;
+    return Math.abs(hash) % 101;
   }
 
   /**
