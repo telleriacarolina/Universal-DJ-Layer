@@ -12,11 +12,22 @@ export class RBACManager {
     [Role.OWNER, 4]
   ]);
 
+  // All permissions available in the system
+  private static readonly ALL_PERMISSIONS = new Set([
+    Permission.READ,
+    Permission.WRITE,
+    Permission.EXECUTE,
+    Permission.DELETE,
+    Permission.CONFIGURE
+  ]);
+
   private rolePermissions: Map<Role, Set<Permission>> = new Map([
     [Role.VIEWER, new Set([Permission.READ])],
     [Role.EXPERIMENTER, new Set([Permission.READ, Permission.WRITE, Permission.EXECUTE])],
-    [Role.ADMIN, new Set([Permission.READ, Permission.WRITE, Permission.EXECUTE, Permission.DELETE, Permission.CONFIGURE])],
-    [Role.OWNER, new Set([Permission.READ, Permission.WRITE, Permission.EXECUTE, Permission.DELETE, Permission.CONFIGURE])]
+    // ADMIN and OWNER have identical permissions by design - both have full system access
+    // The distinction is semantic: OWNER represents the creator/ultimate authority
+    [Role.ADMIN, new Set(RBACManager.ALL_PERMISSIONS)],
+    [Role.OWNER, new Set(RBACManager.ALL_PERMISSIONS)]
   ]);
 
   /**

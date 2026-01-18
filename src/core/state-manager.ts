@@ -113,6 +113,6 @@ export class StateManager {
    * Generate a unique snapshot ID
    */
   private generateSnapshotId(): string {
-    return `snapshot-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return `snapshot-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
   }
 }

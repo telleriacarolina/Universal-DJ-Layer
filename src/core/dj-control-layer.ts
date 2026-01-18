@@ -577,6 +577,11 @@ export class DJControlLayer {
 
   /**
    * Export entire layer state
+   * Note: This exports all snapshots and audit logs which can be large.
+   * For production use with large datasets, consider implementing:
+   * - Pagination or filtering options
+   * - Streaming export for large datasets
+   * - Selective export (e.g., only recent data)
    */
   exportState(): string {
     const discStates: Record<string, any> = {};

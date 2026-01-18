@@ -149,6 +149,9 @@ export class FeatureFlagDisc extends Disc {
 
   /**
    * Simple hash function for user ID
+   * Note: Uses a simple string hash algorithm. For production use with strict
+   * distribution requirements, consider using a cryptographic hash or more
+   * sophisticated distribution algorithm.
    */
   private hashUserId(userId: string): number {
     let hash = 0;
