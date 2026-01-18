@@ -121,31 +121,41 @@ export type {
   ComplianceRequirement,
 } from './policies/compliance';
 
-// API exports
-export { applyControl, batchApplyControls, validateControl } from './api/apply-control';
-export type {
-  ApplyControlOptions,
-  ApplyControlResponse,
-} from './api/apply-control';
+// API exports - Phase 4 Public API Layer
+export { 
+  applyControl,
+  revertControl,
+  previewControl,
+  listControls,
+  getControl,
+  ControlAPI,
+} from './api';
 
-export { revertControl, batchRevertControls, revertControlsByType, revertToSnapshot } from './api/revert-control';
 export type {
-  RevertControlOptions,
-  RevertControlResponse,
-} from './api/revert-control';
+  Actor,
+  ApplyOptions,
+  ApplyResult,
+  RevertOptions,
+  RevertResult,
+  PreviewOptions,
+  PreviewResult,
+  ListOptions,
+  ControlList,
+  ControlDetail,
+} from './api';
 
-export { previewControl, batchPreviewControls, compareDiscs, generateDiffReport } from './api/preview-control';
-export type {
-  PreviewControlOptions,
-  PreviewControlResponse,
-  ImpactAnalysisResult,
-} from './api/preview-control';
+export { 
+  Permission,
+} from './api';
 
-export { listControls, getControl, listControlsByDiscType, listControlsByActor, getControlStatistics, searchControls } from './api/list-controls';
-export type {
-  ListControlsRequest,
-  ListControlsResponse,
-} from './api/list-controls';
+export {
+  ControlAPIError,
+  PermissionError,
+  PolicyViolationError,
+  NotFoundError,
+  ApplyError,
+  ValidationError,
+} from './api';
 
 // Audit exports
 export { AuditLog } from './audit/audit-log';

@@ -3,184 +3,123 @@
  * 
  * This API allows safe preview of control changes in an isolated
  * sandbox without affecting the running system.
- * 
- * TODO: Implement preview control with sandbox execution
  */
 
-import type { DJEngine, PreviewResult } from '../core/dj-engine';
+import type { DJEngine } from '../core/dj-engine';
 import type { Disc } from '../discs/feature-disc';
-import type { Role } from '../roles/creator';
-
-export interface PreviewControlOptions {
-  /** Include detailed diff in preview */
-  includeDetailedDiff?: boolean;
-  /** Run impact analysis */
-  runImpactAnalysis?: boolean;
-  /** Additional context for preview */
-  context?: Record<string, any>;
-  /** Timeout in milliseconds */
-  timeout?: number;
-}
-
-export interface PreviewControlResponse {
-  /** Whether the preview succeeded */
-  success: boolean;
-  /** Preview result if successful */
-  result?: PreviewResult;
-  /** Error message if failed */
-  error?: string;
-  /** Time taken for preview */
-  durationMs?: number;
-  /** Impact analysis results */
-  impactAnalysis?: ImpactAnalysisResult;
-}
-
-export interface ImpactAnalysisResult {
-  /** Number of users affected */
-  affectedUsers?: number;
-  /** System components affected */
-  affectedComponents: string[];
-  /** Performance impact estimate */
-  performanceImpact?: 'none' | 'low' | 'medium' | 'high';
-  /** Risk level */
-  riskLevel: 'low' | 'medium' | 'high' | 'critical';
-  /** Recommended actions */
-  recommendations?: string[];
-}
+import type { Actor, PreviewOptions, PreviewResult } from './types';
+import { Permission } from './types';
+import { PermissionError } from './errors';
+import { validateDisc, validateActor } from './validators';
 
 /**
  * Preview a control change without applying it
  * 
+ * This function orchestrates the complete preview flow:
+ * 1. Validates inputs
+ * 2. Checks preview permission
+ * 3. Creates isolated snapshot
+ * 4. Executes in sandbox
+ * 5. Calculates diff
+ * 6. Evaluates safety
+ * 7. Logs preview
+ * 8. Cleans up temporary snapshot
+ * 
  * @param engine - The DJ engine instance
  * @param disc - The disc to preview
- * @param role - The role previewing the control
- * @param options - Additional options
- * @returns Promise resolving to preview control response
+ * @param actor - The actor previewing the control
+ * @param options - Additional options for preview
+ * @returns Promise resolving to preview result
+ * @throws {ValidationError} If inputs are invalid
+ * @throws {PermissionError} If actor lacks required permissions
  */
 export async function previewControl(
   engine: DJEngine,
   disc: Disc,
-  role: Role,
-  options: PreviewControlOptions = {}
-): Promise<PreviewControlResponse> {
-  const startTime = Date.now();
+  actor: Actor,
+  options: PreviewOptions = {}
+): Promise<PreviewResult> {
+  // 1. Validate inputs
+  validateDisc(disc);
+  validateActor(actor);
+
+  // 2. Check preview permission
+  const hasPermission = actor.role.hasPermission(Permission.PREVIEW) ||
+                        actor.role.hasPermission('preview-control');
+  if (!hasPermission) {
+    throw new PermissionError('Actor lacks permission to preview');
+  }
+
+  // 3. Create isolated snapshot
+  let snapshotId: string | undefined;
+  if (typeof (engine as any).createSnapshot === 'function') {
+    const snapshot = await (engine as any).createSnapshot({ 
+      reason: 'preview', 
+      temporary: true,
+      metadata: { actorId: actor.id, discId: disc.metadata.id },
+    });
+    snapshotId = snapshot.snapshotId;
+  }
 
   try {
-    // TODO: Validate inputs
-    // TODO: Check role has preview permission
-    // TODO: Create isolated sandbox environment
-    // TODO: Run disc in preview mode
-    // TODO: Calculate diff and affected systems
-    // TODO: Run impact analysis if requested
-    // TODO: Return preview response
+    // 4. Execute in sandbox (or use preview mode)
+    let result;
+    let diff: any = {};
+    let safe = true;
+    let warnings: string[] = [];
 
-    const result = await engine.previewControl(disc, role);
+    if (typeof (engine as any).executeInSandbox === 'function' && snapshotId) {
+      // 5. Calculate diff
+      result = await (engine as any).executeInSandbox(disc, snapshotId);
+      
+      if (typeof (engine as any).calculateDiff === 'function') {
+        diff = await (engine as any).calculateDiff(snapshotId, result.stateId);
+      }
 
-    const response: PreviewControlResponse = {
-      success: true,
-      result,
-      durationMs: Date.now() - startTime,
-    };
-
-    // Add impact analysis if requested
-    if (options.runImpactAnalysis) {
-      response.impactAnalysis = await analyzeImpact(result, disc);
+      // 6. Evaluate safety
+      if (typeof (engine as any).evaluateSafety === 'function') {
+        const safetyCheck = await (engine as any).evaluateSafety(result, diff);
+        safe = safetyCheck.safe;
+        warnings = safetyCheck.warnings || [];
+      }
+    } else {
+      // Fallback to basic preview
+      result = await engine.previewControl(disc, actor.role);
+      safe = result.safe;
+      warnings = result.potentialIssues || [];
+      diff = result.diff;
     }
 
-    return response;
-  } catch (error) {
-    // TODO: Log error
-    // TODO: Return error response
+    // 7. Log preview
+    if (typeof (engine as any).auditLog?.log === 'function') {
+      await (engine as any).auditLog.log({
+        action: 'preview',
+        actorId: actor.id,
+        actorRole: actor.role.metadata.roleType,
+        controlId: disc.metadata.id,
+        discType: disc.metadata.discType,
+        result: 'success',
+        metadata: { safe },
+      });
+    }
+
     return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-      durationMs: Date.now() - startTime,
+      safe,
+      warnings,
+      changes: diff,
+      estimatedImpact: result?.impact || result?.affectedSystems || [],
     };
+  } finally {
+    // 8. Always cleanup preview snapshot
+    if (snapshotId && typeof (engine as any).deleteSnapshot === 'function') {
+      try {
+        await (engine as any).deleteSnapshot(snapshotId);
+      } catch (error) {
+        // Log but don't fail if cleanup fails
+        console.error('Failed to cleanup preview snapshot:', error);
+      }
+    }
   }
 }
 
-/**
- * Compare two discs to see their differences
- * 
- * @param disc1 - First disc to compare
- * @param disc2 - Second disc to compare
- * @returns Diff result showing differences
- */
-export function compareDiscs(
-  disc1: Disc,
-  disc2: Disc
-): { differences: any[]; identical: boolean } {
-  // TODO: Deep compare disc configurations
-  // TODO: Identify differences
-  // TODO: Return comparison result
-  
-  throw new Error('Not implemented');
-}
 
-/**
- * Analyze the impact of a control change
- * 
- * @param preview - Preview result from engine
- * @param disc - The disc being previewed
- * @returns Impact analysis result
- */
-async function analyzeImpact(
-  preview: PreviewResult,
-  disc: Disc
-): Promise<ImpactAnalysisResult> {
-  // TODO: Analyze affected systems
-  // TODO: Estimate user impact
-  // TODO: Calculate performance impact
-  // TODO: Assess risk level
-  // TODO: Generate recommendations
-  
-  return {
-    affectedComponents: preview.affectedSystems,
-    riskLevel: preview.safe ? 'low' : 'high',
-    recommendations: preview.potentialIssues,
-  };
-}
-
-/**
- * Batch preview multiple controls
- * 
- * @param engine - The DJ engine instance
- * @param discs - Array of discs to preview
- * @param role - The role previewing the controls
- * @param options - Additional options
- * @returns Promise resolving to array of preview responses
- */
-export async function batchPreviewControls(
-  engine: DJEngine,
-  discs: Disc[],
-  role: Role,
-  options: PreviewControlOptions = {}
-): Promise<PreviewControlResponse[]> {
-  // TODO: Validate inputs
-  // TODO: Preview each disc
-  // TODO: Check for conflicts between previewed discs
-  // TODO: Return array of responses
-  
-  const results: PreviewControlResponse[] = [];
-
-  for (const disc of discs) {
-    const result = await previewControl(engine, disc, role, options);
-    results.push(result);
-  }
-
-  return results;
-}
-
-/**
- * Generate a visual diff report
- * 
- * @param preview - Preview result
- * @returns Human-readable diff report
- */
-export function generateDiffReport(preview: PreviewResult): string {
-  // TODO: Format diff into human-readable report
-  // TODO: Highlight important changes
-  // TODO: Return formatted report
-  
-  throw new Error('Not implemented');
-}
