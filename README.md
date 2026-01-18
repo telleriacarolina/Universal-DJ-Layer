@@ -8,11 +8,13 @@ The **Universal DJ Control Layer** is a headless TypeScript framework that allow
 
 **Key Features:**
 - **Preview-Before-Apply**: Test changes in a sandbox before committing
-- **Reversible Controls**: All modifications can be rolled back instantly
+- **Reversible Controls**: All modifications can be rolled back instantly via StateManager
 - **Creator Locks**: Original creators retain veto power over changes
 - **Role-Based Access Control (RBAC)**: Fine-grained permissions for different user types
-- **Full Audit Trail**: Every change is logged with diff support
+- **Full Audit Trail**: Every change is logged with AuditLog for compliance
 - **Headless Core**: UI optional—core package is entirely backend-focused
+- **State Snapshots**: Point-in-time snapshots with diff calculation
+- **Real-time Streaming**: Monitor audit events in real-time
 
 ## 📦 Installation
 
@@ -23,6 +25,61 @@ yarn add universal-dj-layer
 ```
 
 ## 🚀 Quick Start
+
+### StateManager & AuditLog (Foundation)
+
+```typescript
+import { StateManager } from 'universal-dj-layer/core/state-manager';
+import { AuditLog } from 'universal-dj-layer/audit/audit-log';
+
+// Initialize core modules
+const stateManager = new StateManager({
+  maxSnapshots: 100,
+  enablePersistence: false
+});
+
+const auditLog = new AuditLog({
+  enabled: true,
+  retentionDays: 365,
+  includeSensitiveData: false
+});
+
+// Create a snapshot before changes
+const snapshot = await stateManager.createSnapshot({
+  reason: 'before feature deployment'
+});
+
+// Apply changes and track them
+const change = await stateManager.applyDiscChanges('feature-toggle', {
+  darkMode: true,
+  betaFeatures: ['advanced-search', 'real-time-collab']
+});
+
+// Log the operation
+await auditLog.log({
+  action: 'apply',
+  actorId: 'admin@example.com',
+  actorRole: 'admin',
+  controlId: 'feature-toggle',
+  result: 'success',
+  changes: {
+    before: change.before,
+    after: change.after
+  }
+});
+
+// Rollback if needed
+await stateManager.rollbackToSnapshot(snapshot.snapshotId);
+await auditLog.log({
+  action: 'revert',
+  actorId: 'admin@example.com',
+  actorRole: 'admin',
+  result: 'success',
+  metadata: { snapshotId: snapshot.snapshotId }
+});
+```
+
+### DJEngine (Coming Soon)
 
 ```typescript
 import { DJEngine, FeatureDisc, CreatorRole } from 'universal-dj-layer';
@@ -126,9 +183,124 @@ const controls = await dj.listControls({ status: 'active' });
 
 ## 📊 Observability & Audit
 
-### Audit Log
+### StateManager - Snapshots & Rollback
+
+Create point-in-time snapshots and rollback when needed:
+
+```typescript
+import { StateManager } from 'universal-dj-layer/core/state-manager';
+
+const stateManager = new StateManager();
+
+// Create snapshot
+const snapshot = await stateManager.createSnapshot({
+  reason: 'before deployment',
+  author: 'admin@example.com'
+});
+
+// Get current state
+const state = await stateManager.getCurrentState();
+
+// List snapshots with filters
+const recent = await stateManager.listSnapshots({
+  startTime: Date.now() - 86400000, // Last 24 hours
+  controlId: 'feature-123'
+});
+
+// Calculate diff between snapshots
+const diffs = await stateManager.diff(snapshot1.snapshotId, snapshot2.snapshotId);
+
+// Rollback
+await stateManager.rollbackToSnapshot(snapshot.snapshotId);
+
+// Cleanup old snapshots
+const removed = await stateManager.cleanup(30); // 30 days retention
+```
+
+### AuditLog - Complete Audit Trail
 
 Every action is automatically logged with full context:
+
+```typescript
+import { AuditLog } from 'universal-dj-layer/audit/audit-log';
+
+const auditLog = new AuditLog({
+  enabled: true,
+  retentionDays: 365,
+  includeSensitiveData: false
+});
+
+// Log an operation
+await auditLog.log({
+  action: 'apply',
+  actorId: 'user-123',
+  actorRole: 'admin',
+  controlId: 'ctrl-456',
+  discType: 'feature',
+  result: 'success',
+  changes: { before: {...}, after: {...} },
+  metadata: { reason: 'production deployment' }
+});
+
+// Query audit log
+const entries = await auditLog.query({
+  actorId: 'user-123',
+  startTime: Date.now() - 86400000,
+  action: 'apply',
+  result: 'success',
+  limit: 50
+});
+
+// Stream audit events in real-time
+const unsubscribe = await auditLog.stream((entry) => {
+  console.log('New audit event:', entry.action, entry.actorId);
+  if (entry.result === 'failure') {
+    alertSystem.notify(entry);
+  }
+});
+
+// Export audit log
+const jsonExport = await auditLog.export('json', {
+  startTime: Date.now() - 604800000 // Last 7 days
+});
+
+const csvExport = await auditLog.export('csv', {
+  actorId: 'user-123'
+});
+
+// Cleanup old entries
+const removed = await auditLog.cleanup(90); // 90 days retention
+```
+
+### Event Hooks
+
+Both modules emit events for real-time monitoring:
+
+```typescript
+// StateManager events
+stateManager.on('snapshot-created', (snapshot) => {
+  console.log('New snapshot:', snapshot.snapshotId);
+});
+
+stateManager.on('state-changed', (change) => {
+  console.log('State changed:', change.controlId);
+});
+
+stateManager.on('snapshot-restored', (snapshotId) => {
+  console.log('Rolled back to:', snapshotId);
+});
+
+// AuditLog events
+auditLog.on('audit-logged', (entry) => {
+  console.log('Logged:', entry.action, 'by', entry.actorId);
+});
+
+auditLog.on('audit-query', (options) => {
+  console.log('Query executed with filters:', options);
+});
+```
+
+### DJEngine Audit (Coming Soon)
 
 ```typescript
 const auditLog = await dj.getAuditLog({
@@ -153,7 +325,7 @@ const auditLog = await dj.getAuditLog({
 // }
 ```
 
-### Change History & Diffs
+### Change History & Diffs (Coming Soon)
 
 ```typescript
 const history = await dj.getChangeHistory(controlId);
@@ -184,6 +356,10 @@ Built-in guardrails prevent common mistakes:
 
 ### Phase 1: Core Foundation ✅
 - [x] Architecture design
+- [x] StateManager implementation (snapshots, rollback, diffs)
+- [x] AuditLog implementation (logging, filtering, export)
+- [x] Comprehensive test coverage (>90%)
+- [x] Full documentation
 - [ ] Core engine implementation
 - [ ] Basic disc types
 - [ ] Role system
@@ -208,6 +384,13 @@ Built-in guardrails prevent common mistakes:
 - [ ] Advanced compliance tools
 - [ ] Multi-region support
 - [ ] Enterprise audit features
+
+## 📚 Documentation
+
+- **[Foundation Documentation](./docs/FOUNDATION.md)**: Comprehensive guide to StateManager and AuditLog
+- **[Architecture Overview](./ARCHITECTURE.md)**: System design and architecture
+- **[Integration Guide](./INTEGRATION.md)**: How to integrate with your application
+- **[Implementation Summary](./IMPLEMENTATION_SUMMARY.md)**: Current implementation status
 
 ## ✅ What This Is
 
@@ -235,7 +418,9 @@ MIT © 2026 Carolina Telleria
 
 ## 🔗 Resources
 
-- Documentation (coming soon)
+- [Foundation Documentation](./docs/FOUNDATION.md) - StateManager & AuditLog guide
+- [Architecture Documentation](./ARCHITECTURE.md)
+- [Integration Guide](./INTEGRATION.md)
 - Examples (coming soon)
 - API Reference (coming soon)
 - Community Discord (coming soon)

@@ -7,10 +7,9 @@
  * - Enable rollback to previous states
  * - Provide state snapshots for preview mode
  * - Persist state across restarts (optional)
- * 
- * TODO: Implement state management with history tracking and rollback capability
  */
 
+import { EventEmitter } from 'events';
 import type { ControlResult } from './dj-engine';
 import type { Disc } from '../discs/feature-disc';
 
@@ -40,6 +39,17 @@ export interface StateChange {
   changeType: 'apply' | 'revert' | 'modify';
 }
 
+export interface ChangeDiff {
+  /** Path to the changed property */
+  path: string;
+  /** Type of change */
+  type: 'added' | 'removed' | 'modified';
+  /** Old value (if modified or removed) */
+  oldValue?: any;
+  /** New value (if added or modified) */
+  newValue?: any;
+}
+
 export interface StateManagerConfig {
   /** Maximum number of snapshots to keep */
   maxSnapshots?: number;
@@ -49,128 +59,397 @@ export interface StateManagerConfig {
   storageBackend?: 'memory' | 'file' | 'database';
 }
 
-export class StateManager {
+export interface ChangeDiff {
+  path: string;
+  type: 'added' | 'removed' | 'modified';
+  before?: any;
+  after?: any;
+}
+
+export class StateManager extends EventEmitter {
   private config: StateManagerConfig;
   private currentState: any = {};
-  private snapshots: StateSnapshot[] = [];
+  private snapshots: Map<string, StateSnapshot> = new Map();
   private changeHistory: StateChange[] = [];
   private controlStateMap: Map<string, any> = new Map();
+  private activeControls: Set<string> = new Set();
 
   constructor(config: StateManagerConfig = {}) {
+    super();
     this.config = {
       maxSnapshots: config.maxSnapshots ?? 100,
       enablePersistence: config.enablePersistence ?? false,
       storageBackend: config.storageBackend ?? 'memory',
     };
-    // TODO: Initialize storage backend if persistence enabled
-    // TODO: Load existing state if available
   }
 
   /**
    * Get the current state
+   * @returns Deep copy of current state
+   * @example
+   * const state = stateManager.getCurrentState();
    */
-  getCurrentState(): any {
-    // TODO: Return deep copy of current state
-    return { ...this.currentState };
+  async getCurrentState(): Promise<any> {
+    return this.deepClone(this.currentState);
   }
 
   /**
    * Create a snapshot of the current state
+   * @param metadata - Optional metadata to attach to snapshot
+   * @returns StateSnapshot object with unique ID
+   * @example
+   * const snapshot = await stateManager.createSnapshot({ reason: 'before major change' });
    */
-  createSnapshot(metadata?: Record<string, any>): StateSnapshot {
-    // TODO: Generate unique snapshot ID
-    // TODO: Deep copy current state
-    // TODO: Record active controls
-    // TODO: Add to snapshots array
-    // TODO: Enforce max snapshots limit
-    // TODO: Persist if enabled
-    // TODO: Return snapshot
-    throw new Error('Not implemented');
+  async createSnapshot(metadata?: Record<string, any>): Promise<StateSnapshot> {
+    const snapshotId = this.generateSnapshotId();
+    const timestamp = Date.now();
+    
+    const snapshot: StateSnapshot = {
+      snapshotId,
+      timestamp,
+      state: this.deepClone(this.currentState),
+      activeControls: Array.from(this.activeControls),
+      metadata,
+    };
+
+    this.snapshots.set(snapshotId, snapshot);
+    
+    // Enforce max snapshots limit
+    if (this.snapshots.size > this.config.maxSnapshots!) {
+      const sortedSnapshots = Array.from(this.snapshots.values())
+        .sort((a, b) => a.timestamp - b.timestamp);
+      const oldestSnapshot = sortedSnapshots[0];
+      this.snapshots.delete(oldestSnapshot.snapshotId);
+      this.emit('snapshot-deleted', oldestSnapshot.snapshotId);
+    }
+
+    this.emit('snapshot-created', snapshot);
+    return snapshot;
   }
 
   /**
    * Apply changes from a disc to the state
+   * @param controlId - ID of the control applying changes
+   * @param disc - Disc object or state changes
+   * @returns StateChange record
+   * @example
+   * const change = await stateManager.applyDiscChanges('control-1', myDisc);
    */
-  applyDiscChanges(controlId: string, disc: Disc): StateChange {
-    // TODO: Capture current state as 'before'
-    // TODO: Apply disc transformations to state
-    // TODO: Capture new state as 'after'
-    // TODO: Record change in history
-    // TODO: Update control state map
-    // TODO: Create snapshot
-    // TODO: Return state change record
-    throw new Error('Not implemented');
+  async applyDiscChanges(controlId: string, disc: any): Promise<StateChange> {
+    const before = this.deepClone(this.currentState);
+    
+    // Merge disc into current state (not replace)
+    if (disc && typeof disc === 'object') {
+      Object.keys(disc).forEach(key => {
+        if (disc[key] === undefined) {
+          delete this.currentState[key];
+        } else {
+          this.currentState[key] = disc[key];
+        }
+      });
+    }
+    
+    const after = this.deepClone(this.currentState);
+    
+    const stateChange: StateChange = {
+      controlId,
+      timestamp: Date.now(),
+      before,
+      after,
+      changeType: 'apply',
+    };
+
+    this.changeHistory.push(stateChange);
+    this.controlStateMap.set(controlId, { before, after });
+    this.activeControls.add(controlId);
+
+    // Create automatic snapshot
+    await this.createSnapshot({ controlId, changeType: 'apply' });
+
+    this.emit('state-changed', stateChange);
+    return stateChange;
   }
 
   /**
    * Rollback to a previous state snapshot
+   * @param snapshotId - ID of the snapshot to restore
+   * @throws Error if snapshot not found
+   * @example
+   * await stateManager.rollbackToSnapshot('snapshot-123');
    */
-  rollbackToSnapshot(snapshotId: string): void {
-    // TODO: Find snapshot by ID
-    // TODO: Validate snapshot exists
-    // TODO: Restore state from snapshot
-    // TODO: Update current state
-    // TODO: Create new snapshot of rollback
-    // TODO: Record rollback in change history
-    throw new Error('Not implemented');
+  async rollbackToSnapshot(snapshotId: string): Promise<void> {
+    const snapshot = this.snapshots.get(snapshotId);
+    
+    if (!snapshot) {
+      throw new Error(`Snapshot not found: ${snapshotId}`);
+    }
+
+    const before = this.deepClone(this.currentState);
+    this.currentState = this.deepClone(snapshot.state);
+    this.activeControls = new Set(snapshot.activeControls);
+
+    const stateChange: StateChange = {
+      controlId: `rollback-${snapshotId}`,
+      timestamp: Date.now(),
+      before,
+      after: this.deepClone(this.currentState),
+      changeType: 'revert',
+    };
+
+    this.changeHistory.push(stateChange);
+    
+    // Create new snapshot of the rolled-back state
+    await this.createSnapshot({ rollbackTo: snapshotId });
+
+    this.emit('snapshot-restored', snapshotId);
   }
 
   /**
    * Revert changes from a specific control
+   * @param controlId - ID of the control to revert
+   * @returns StateChange record
+   * @throws Error if control not found
    */
-  revertControlChanges(controlId: string): StateChange {
-    // TODO: Find control in state map
-    // TODO: Retrieve original state before control
-    // TODO: Apply reverse transformation
-    // TODO: Remove from control state map
-    // TODO: Record revert in change history
-    // TODO: Create snapshot
-    // TODO: Return state change record
-    throw new Error('Not implemented');
+  async revertControlChanges(controlId: string): Promise<StateChange> {
+    const controlState = this.controlStateMap.get(controlId);
+    
+    if (!controlState) {
+      throw new Error(`Control not found: ${controlId}`);
+    }
+
+    const before = this.deepClone(this.currentState);
+    this.currentState = this.deepClone(controlState.before);
+    
+    const stateChange: StateChange = {
+      controlId,
+      timestamp: Date.now(),
+      before,
+      after: this.deepClone(this.currentState),
+      changeType: 'revert',
+    };
+
+    this.changeHistory.push(stateChange);
+    this.controlStateMap.delete(controlId);
+    this.activeControls.delete(controlId);
+
+    await this.createSnapshot({ controlId, changeType: 'revert' });
+
+    this.emit('state-changed', stateChange);
+    return stateChange;
   }
 
   /**
    * Get change history for a specific control
+   * @param controlId - ID of the control
+   * @returns Array of state changes
    */
   getControlHistory(controlId: string): StateChange[] {
-    // TODO: Filter change history by control ID
-    // TODO: Return chronological list
     return this.changeHistory.filter(change => change.controlId === controlId);
   }
 
   /**
    * Get a specific snapshot by ID
+   * @param snapshotId - ID of the snapshot
+   * @returns StateSnapshot or null if not found
    */
-  getSnapshot(snapshotId: string): StateSnapshot | null {
-    // TODO: Find snapshot by ID
-    // TODO: Return snapshot or null if not found
-    return this.snapshots.find(s => s.snapshotId === snapshotId) ?? null;
+  async getSnapshot(snapshotId: string): Promise<StateSnapshot | null> {
+    return this.snapshots.get(snapshotId) ?? null;
   }
 
   /**
-   * Calculate diff between two states
+   * List snapshots with optional filtering
+   * @param filter - Optional filter criteria
+   * @returns Array of snapshots matching the filter
+   * @example
+   * const snapshots = await stateManager.listSnapshots({ startTime: Date.now() - 86400000 });
    */
-  calculateDiff(beforeState: any, afterState: any): any {
-    // TODO: Deep compare two states
-    // TODO: Identify added, removed, and changed properties
-    // TODO: Return structured diff
-    throw new Error('Not implemented');
+  async listSnapshots(filter?: { 
+    controlId?: string; 
+    startTime?: number; 
+    endTime?: number;
+  }): Promise<StateSnapshot[]> {
+    let snapshots = Array.from(this.snapshots.values());
+
+    if (filter) {
+      if (filter.controlId) {
+        snapshots = snapshots.filter(s => 
+          s.activeControls.includes(filter.controlId!)
+        );
+      }
+      if (filter.startTime) {
+        snapshots = snapshots.filter(s => s.timestamp >= filter.startTime!);
+      }
+      if (filter.endTime) {
+        snapshots = snapshots.filter(s => s.timestamp <= filter.endTime!);
+      }
+    }
+
+    return snapshots.sort((a, b) => b.timestamp - a.timestamp);
+  }
+
+  /**
+   * Calculate diff between two snapshots
+   * @param snapshotIdA - ID of first snapshot
+   * @param snapshotIdB - ID of second snapshot
+   * @returns Array of change diffs
+   * @throws Error if either snapshot not found
+   */
+  async diff(snapshotIdA: string, snapshotIdB: string): Promise<ChangeDiff[]> {
+    const snapshotA = this.snapshots.get(snapshotIdA);
+    const snapshotB = this.snapshots.get(snapshotIdB);
+
+    if (!snapshotA) {
+      throw new Error(`Snapshot not found: ${snapshotIdA}`);
+    }
+    if (!snapshotB) {
+      throw new Error(`Snapshot not found: ${snapshotIdB}`);
+    }
+
+    return this.calculateDiff(snapshotA.state, snapshotB.state);
+  }
+
+  /**
+   * Remove snapshots older than retention period
+   * @param retentionDays - Number of days to retain snapshots
+   * @returns Number of snapshots removed
+   * @example
+   * const removed = await stateManager.cleanup(30); // Remove snapshots older than 30 days
+   */
+  async cleanup(retentionDays: number): Promise<number> {
+    const cutoffTime = Date.now() - (retentionDays * 24 * 60 * 60 * 1000);
+    const snapshots = Array.from(this.snapshots.values());
+    let removed = 0;
+
+    for (const snapshot of snapshots) {
+      if (snapshot.timestamp < cutoffTime) {
+        this.snapshots.delete(snapshot.snapshotId);
+        this.emit('snapshot-deleted', snapshot.snapshotId);
+        removed++;
+      }
+    }
+
+    return removed;
   }
 
   /**
    * Get state for a specific control
+   * @param controlId - ID of the control
+   * @returns Control state or null if not found
    */
   getControlState(controlId: string): any | null {
-    // TODO: Retrieve state from control state map
     return this.controlStateMap.get(controlId) ?? null;
   }
 
   /**
-   * Clear old snapshots beyond retention limit
+   * Calculate diff between two states
+   * @private
    */
-  private pruneSnapshots(): void {
-    // TODO: Sort snapshots by timestamp
-    // TODO: Keep only most recent up to maxSnapshots
-    // TODO: Remove old snapshots from storage if persistent
+  private calculateDiff(beforeState: any, afterState: any, basePath = ''): ChangeDiff[] {
+    const diffs: ChangeDiff[] = [];
+
+    // Handle null/undefined cases
+    if (beforeState === null || beforeState === undefined) {
+      if (afterState !== null && afterState !== undefined) {
+        diffs.push({ path: basePath || 'root', type: 'added', after: afterState });
+      }
+      return diffs;
+    }
+
+    if (afterState === null || afterState === undefined) {
+      diffs.push({ path: basePath || 'root', type: 'removed', before: beforeState });
+      return diffs;
+    }
+
+    // Handle primitive types
+    if (typeof beforeState !== 'object' || typeof afterState !== 'object') {
+      if (beforeState !== afterState) {
+        diffs.push({
+          path: basePath || 'root',
+          type: 'modified',
+          before: beforeState,
+          after: afterState,
+        });
+      }
+      return diffs;
+    }
+
+    // Handle objects
+    const beforeKeys = Object.keys(beforeState);
+    const afterKeys = Object.keys(afterState);
+    const allKeys = Array.from(new Set([...beforeKeys, ...afterKeys]));
+
+    for (const key of allKeys) {
+      const newPath = basePath ? `${basePath}.${key}` : key;
+
+      if (!(key in beforeState)) {
+        diffs.push({ path: newPath, type: 'added', after: afterState[key] });
+      } else if (!(key in afterState)) {
+        diffs.push({ path: newPath, type: 'removed', before: beforeState[key] });
+      } else if (typeof beforeState[key] === 'object' && typeof afterState[key] === 'object') {
+        // Recursive diff for nested objects
+        diffs.push(...this.calculateDiff(beforeState[key], afterState[key], newPath));
+      } else if (beforeState[key] !== afterState[key]) {
+        diffs.push({
+          path: newPath,
+          type: 'modified',
+          before: beforeState[key],
+          after: afterState[key],
+        });
+      }
+    }
+
+    return diffs;
+  }
+
+  /**
+   * Deep clone an object to prevent mutations
+   * @private
+   */
+  private deepClone(obj: any): any {
+    if (obj === null || typeof obj !== 'object') {
+      return obj;
+    }
+
+    // Handle circular references and complex objects
+    if (obj instanceof Date) {
+      return new Date(obj.getTime());
+    }
+
+    if (obj instanceof Array) {
+      return obj.map(item => this.deepClone(item));
+    }
+
+    if (obj instanceof Map) {
+      const cloned = new Map();
+      obj.forEach((value, key) => {
+        cloned.set(key, this.deepClone(value));
+      });
+      return cloned;
+    }
+
+    if (obj instanceof Set) {
+      const cloned = new Set();
+      obj.forEach(value => {
+        cloned.add(this.deepClone(value));
+      });
+      return cloned;
+    }
+
+    const cloned: any = {};
+    for (const key in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        cloned[key] = this.deepClone(obj[key]);
+      }
+    }
+
+    return cloned;
+  }
+
+  /**
+   * Generate a unique snapshot ID
+   * @private
+   */
+  private generateSnapshotId(): string {
+    return `snapshot-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
   }
 }
