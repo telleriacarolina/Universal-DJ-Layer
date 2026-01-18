@@ -68,6 +68,8 @@ export interface AuditLogConfig {
   includeSensitiveData?: boolean;
   /** Custom storage path (for file storage) */
   storagePath?: string;
+  /** Custom list of sensitive fields to redact (optional) */
+  sensitiveFields?: string[];
 }
 
 export class AuditLog extends EventEmitter {
@@ -75,6 +77,7 @@ export class AuditLog extends EventEmitter {
   private entries: AuditEntry[] = [];
   private entryIndex: Map<string, AuditEntry> = new Map();
   private streamCallbacks: Set<(entry: AuditEntry) => void> = new Set();
+  private sensitiveFieldsLowercase: string[];
 
   constructor(config: AuditLogConfig = {}) {
     super();
@@ -84,7 +87,13 @@ export class AuditLog extends EventEmitter {
       retentionDays: config.retentionDays ?? 365,
       includeSensitiveData: config.includeSensitiveData ?? false,
       storagePath: config.storagePath,
+      sensitiveFields: config.sensitiveFields,
     };
+
+    // Pre-compute lowercase sensitive fields for performance
+    const defaultSensitiveFields = ['password', 'token', 'secret', 'apiKey', 'privateKey', 'ssn', 'creditCard'];
+    const fields = this.config.sensitiveFields || defaultSensitiveFields;
+    this.sensitiveFieldsLowercase = fields.map(f => f.toLowerCase());
   }
 
   /**
@@ -304,12 +313,11 @@ export class AuditLog extends EventEmitter {
    * @private
    */
   private sanitizeSensitiveData(changes: Record<string, any>): Record<string, any> {
-    const sensitiveFields = ['password', 'token', 'secret', 'apiKey', 'privateKey', 'ssn', 'creditCard'];
     const sanitized: Record<string, any> = {};
 
     for (const key in changes) {
       const lowerKey = key.toLowerCase();
-      if (sensitiveFields.some(field => lowerKey.includes(field.toLowerCase()))) {
+      if (this.sensitiveFieldsLowercase.some(field => lowerKey.includes(field))) {
         sanitized[key] = '[REDACTED]';
       } else if (typeof changes[key] === 'object' && changes[key] !== null) {
         sanitized[key] = this.sanitizeSensitiveData(changes[key]);
