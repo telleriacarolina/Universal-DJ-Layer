@@ -10,8 +10,19 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "plugin",
+    "modular",
+    "role-based",
+    "engine",
+    "disc",
+    "control-layer",
+    "observability",
+    "audit",
+    "access-control",
+    "runtime"
+  ],
+  "author": "telleriacarolina",
   "license": "ISC",
   "devDependencies": {
     "@types/jest": "^30.0.0",
