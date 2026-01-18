@@ -332,7 +332,7 @@ export class AuditLog extends EventEmitter {
    * @private
    */
   private generateEntryId(): string {
-    return `audit-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return `audit-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
   }
 
   /**
