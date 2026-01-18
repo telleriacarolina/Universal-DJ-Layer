@@ -99,8 +99,10 @@ export class SafetyPolicy implements Policy {
    * Validate the policy configuration
    */
   validate(): boolean {
-    // TODO: Validate all rules are well-formed
-    // TODO: Validate rule check functions
+    // Allow empty rules if explicitly configured with useDefaultRules: false
+    if (this.config.useDefaultRules === false && this.rules.length === 0) {
+      return true;
+    }
     return this.rules.length > 0;
   }
 
