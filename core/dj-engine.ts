@@ -323,10 +323,11 @@ export class DJEngine {
     if (options?.status === 'active') {
       controls = controls.filter(c => this.activeControls.has(c.controlId));
     } else if (options?.status === 'reverted') {
-      // For reverted, we would need to track that separately
-      // For now, return empty array
+      // Reverted controls are no longer in activeControls
+      // Return empty array as they are not tracked separately
       return [];
     }
+    // If status is 'all' or undefined, return all active controls
 
     return controls;
   }
