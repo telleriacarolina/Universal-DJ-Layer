@@ -119,18 +119,23 @@ export class StateManager extends EventEmitter {
   /**
    * Apply changes from a disc to the state
    * @param controlId - ID of the control applying changes
-   * @param disc - Disc object containing changes
+   * @param disc - Disc object or state changes
    * @returns StateChange record
    * @example
    * const change = await stateManager.applyDiscChanges('control-1', myDisc);
    */
-  async applyDiscChanges(controlId: string, disc: Disc): Promise<StateChange> {
+  async applyDiscChanges(controlId: string, disc: any): Promise<StateChange> {
     const before = this.deepClone(this.currentState);
     
-    // Apply disc transformations (simulate disc execution)
-    // In real implementation, this would call disc.execute()
+    // Merge disc into current state (not replace)
     if (disc && typeof disc === 'object') {
-      this.currentState = { ...this.currentState, ...disc };
+      Object.keys(disc).forEach(key => {
+        if (disc[key] === undefined) {
+          delete this.currentState[key];
+        } else {
+          this.currentState[key] = disc[key];
+        }
+      });
     }
     
     const after = this.deepClone(this.currentState);
