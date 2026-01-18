@@ -14,7 +14,7 @@
     "sourceMap": true,
     "outDir": "./dist",
     "rootDir": ".",
-    "types": []
+    "types": ["jest", "node"]
   },
   "include": [
     "**/*.ts"
