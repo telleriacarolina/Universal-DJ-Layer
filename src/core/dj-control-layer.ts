@@ -398,7 +398,7 @@ export class DJControlLayer {
     const metadata = disc.getMetadata();
 
     // Check permissions
-    if (!this.rbacManager.canPerformAction(user, metadata.requiredRole, [Permission.CONFIGURE])) {
+    if (!this.rbacManager.canPerformAction(user, metadata.requiredRole, [Permission.WRITE])) {
       throw new Error('Insufficient permissions to update disc configuration');
     }
 
