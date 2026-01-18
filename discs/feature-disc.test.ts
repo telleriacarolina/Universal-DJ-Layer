@@ -857,6 +857,64 @@ describe('FeatureDisc', () => {
       expect(preview.changes.feature1.proposed.rolloutPercentage).toBe(75);
     });
 
+    test('detects allowlist and denylist changes', async () => {
+      const disc = new FeatureDisc({
+        name: 'test',
+        features: {
+          feature1: {
+            enabled: true,
+            allowlist: ['user1', 'user2'],
+            denylist: ['user3'],
+          },
+        },
+      });
+
+      const context = {
+        features: {
+          feature1: {
+            enabled: true,
+            allowlist: ['user1'],
+            denylist: [],
+          },
+        },
+      };
+
+      const preview = await disc.preview(context);
+
+      expect(preview.changes.feature1).toBeDefined();
+      expect(preview.changes.feature1.action).toBe('modify');
+      expect(preview.changes.feature1.proposed.allowlist).toEqual(['user1', 'user2']);
+      expect(preview.changes.feature1.proposed.denylist).toEqual(['user3']);
+    });
+
+    test('detects dependency changes', async () => {
+      const disc = new FeatureDisc({
+        name: 'test',
+        features: {
+          feature1: { enabled: true },
+          feature2: {
+            enabled: true,
+            dependencies: ['feature1'],
+          },
+        },
+      });
+
+      const context = {
+        features: {
+          feature2: {
+            enabled: true,
+            dependencies: [],
+          },
+        },
+      };
+
+      const preview = await disc.preview(context);
+
+      expect(preview.changes.feature2).toBeDefined();
+      expect(preview.changes.feature2.action).toBe('modify');
+      expect(preview.changes.feature2.proposed.dependencies).toEqual(['feature1']);
+    });
+
     test('returns empty changes for identical state', async () => {
       const disc = new FeatureDisc({
         name: 'test',

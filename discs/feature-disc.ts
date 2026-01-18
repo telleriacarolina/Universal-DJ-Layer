@@ -149,14 +149,27 @@ export class FeatureDisc implements Disc {
       const normalizedState = this.normalizeFeatureState(featureState);
       const currentState = currentFeatures[featureKey];
 
-      if (!currentState || 
-          currentState.enabled !== normalizedState.enabled ||
-          currentState.rolloutPercentage !== normalizedState.rolloutPercentage) {
+      if (!currentState) {
         changes[featureKey] = {
-          current: currentState || { enabled: false },
+          current: { enabled: false },
           proposed: normalizedState,
-          action: currentState ? 'modify' : 'add',
+          action: 'add',
         };
+      } else {
+        const hasChanges = 
+          currentState.enabled !== normalizedState.enabled ||
+          currentState.rolloutPercentage !== normalizedState.rolloutPercentage ||
+          JSON.stringify(currentState.allowlist || []) !== JSON.stringify(normalizedState.allowlist || []) ||
+          JSON.stringify(currentState.denylist || []) !== JSON.stringify(normalizedState.denylist || []) ||
+          JSON.stringify(currentState.dependencies || []) !== JSON.stringify(normalizedState.dependencies || []);
+
+        if (hasChanges) {
+          changes[featureKey] = {
+            current: currentState,
+            proposed: normalizedState,
+            action: 'modify',
+          };
+        }
       }
     }
 
@@ -196,11 +209,15 @@ export class FeatureDisc implements Disc {
             errors.push(`Feature '${featureKey}': dependency '${dep}' does not exist`);
           }
         }
+      }
+    }
 
-        // Check for circular dependencies
-        const visited = new Set<string>();
-        const recursionStack = new Set<string>();
-        
+    // Check for circular dependencies (once for all features)
+    const visited = new Set<string>();
+    const recursionStack = new Set<string>();
+    
+    for (const featureKey of Object.keys(this.config.features)) {
+      if (!visited.has(featureKey)) {
         if (this.hasCircularDependency(featureKey, visited, recursionStack)) {
           errors.push(`Feature '${featureKey}': circular dependency detected`);
         }
@@ -423,18 +440,18 @@ export class FeatureDisc implements Disc {
   }
 
   /**
-   * Hash a user ID to a deterministic value 0-99
+   * Hash a user ID to a deterministic value 0-99 using djb2 algorithm
    * @private
    */
   private hashUser(userId: string, featureKey: string): number {
     const combined = `${userId}:${featureKey}`;
-    let hash = 0;
+    let hash = 5381;
     
     for (let i = 0; i < combined.length; i++) {
-      hash = (hash + combined.charCodeAt(i)) % 100;
+      hash = ((hash << 5) + hash) + combined.charCodeAt(i);
     }
     
-    return hash;
+    return Math.abs(hash) % 100;
   }
 
   /**
@@ -449,10 +466,23 @@ export class FeatureDisc implements Disc {
     visited.add(featureKey);
     recursionStack.add(featureKey);
 
-    const featureState = this.normalizeFeatureState(this.config.features[featureKey]);
-    const dependencies = featureState.dependencies || [];
+    const featureState = this.config.features[featureKey];
+    
+    // If feature doesn't exist, skip it (will be caught in validation)
+    if (!featureState) {
+      recursionStack.delete(featureKey);
+      return false;
+    }
+
+    const normalizedState = this.normalizeFeatureState(featureState);
+    const dependencies = normalizedState.dependencies || [];
 
     for (const dep of dependencies) {
+      // Skip non-existent dependencies (will be caught in validation)
+      if (!this.config.features[dep]) {
+        continue;
+      }
+
       if (!visited.has(dep)) {
         if (this.hasCircularDependency(dep, visited, recursionStack)) {
           return true;
@@ -467,6 +497,6 @@ export class FeatureDisc implements Disc {
   }
 
   private generateId(): string {
-    return `feature-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return `feature-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
   }
 }
