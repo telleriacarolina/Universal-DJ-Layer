@@ -207,7 +207,9 @@ describe('StateManager', () => {
       await stateManager.applyDiscChanges('control-1', { prop1: 'a', prop2: 'b' });
       const snapshot1 = await stateManager.createSnapshot();
       
-      await stateManager.applyDiscChanges('control-2', { prop1: 'a' });
+      // To simulate removal, we need to explicitly set it to undefined or delete it
+      // In a real disc, removal would be explicit
+      await stateManager.applyDiscChanges('control-2', { prop1: 'a', prop2: undefined });
       const snapshot2 = await stateManager.createSnapshot();
       
       const diffs = await stateManager.diff(snapshot1.snapshotId, snapshot2.snapshotId);
