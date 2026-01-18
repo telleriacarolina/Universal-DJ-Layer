@@ -286,7 +286,7 @@ export class FeatureDisc implements Disc {
     // Check rollout percentage if defined
     if (normalizedState.rolloutPercentage !== undefined) {
       const userHash = this.hashUser(userId, featureKey);
-      return userHash <= normalizedState.rolloutPercentage;
+      return userHash < normalizedState.rolloutPercentage;
     }
 
     // Default to base enabled state
@@ -451,7 +451,7 @@ export class FeatureDisc implements Disc {
   }
 
   /**
-   * Hash a user ID to a deterministic value 0-100 using djb2 algorithm
+   * Hash a user ID to a deterministic value 0-99 using djb2 algorithm
    * @private
    */
   private hashUser(userId: string, featureKey: string): number {
@@ -462,7 +462,7 @@ export class FeatureDisc implements Disc {
       hash = ((hash << 5) + hash) + combined.charCodeAt(i);
     }
     
-    return Math.abs(hash) % 101;
+    return Math.abs(hash) % 100;
   }
 
   /**
