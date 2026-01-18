@@ -8,9 +8,10 @@ module.exports = {
     'core/**/*.ts',
     'audit/**/*.ts',
     '!src/**/*.test.ts',
-    '!src/**/__tests__/**',
     '!core/**/*.test.ts',
     '!audit/**/*.test.ts',
-    '!tests/**/*.ts'
+    '!src/**/__tests__/**',
+    '!core/**/__tests__/**',
+    '!audit/**/__tests__/**'
   ]
 };

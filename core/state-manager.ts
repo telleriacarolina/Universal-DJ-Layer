@@ -59,12 +59,20 @@ export interface StateManagerConfig {
   storageBackend?: 'memory' | 'file' | 'database';
 }
 
+export interface ChangeDiff {
+  path: string;
+  type: 'added' | 'removed' | 'modified';
+  before?: any;
+  after?: any;
+}
+
 export class StateManager extends EventEmitter {
   private config: StateManagerConfig;
   private currentState: any = {};
   private snapshots: Map<string, StateSnapshot> = new Map();
   private changeHistory: StateChange[] = [];
   private controlStateMap: Map<string, any> = new Map();
+  private activeControls: Set<string> = new Set();
 
   constructor(config: StateManagerConfig = {}) {
     super();
@@ -78,21 +86,21 @@ export class StateManager extends EventEmitter {
   /**
    * Get the current state
    * @returns Deep copy of current state
+   * @example
+   * const state = stateManager.getCurrentState();
    */
-  getCurrentState(): any {
+  async getCurrentState(): Promise<any> {
     return this.deepClone(this.currentState);
   }
 
   /**
    * Create a snapshot of the current state
-   * @param metadata Optional metadata to attach to the snapshot
-   * @returns The created snapshot
+   * @param metadata - Optional metadata to attach to snapshot
+   * @returns StateSnapshot object with unique ID
    * @example
-   * ```typescript
-   * const snapshot = stateManager.createSnapshot({ reason: 'Before applying feature' });
-   * ```
+   * const snapshot = await stateManager.createSnapshot({ reason: 'before major change' });
    */
-  createSnapshot(metadata?: Record<string, any>): StateSnapshot {
+  async createSnapshot(metadata?: Record<string, any>): Promise<StateSnapshot> {
     const snapshotId = this.generateSnapshotId();
     const timestamp = Date.now();
     
@@ -100,36 +108,46 @@ export class StateManager extends EventEmitter {
       snapshotId,
       timestamp,
       state: this.deepClone(this.currentState),
-      activeControls: Array.from(this.controlStateMap.keys()),
-      metadata: metadata ? { ...metadata } : undefined,
+      activeControls: Array.from(this.activeControls),
+      metadata,
     };
 
     this.snapshots.set(snapshotId, snapshot);
     
     // Enforce max snapshots limit
-    this.pruneSnapshots();
-    
-    // Emit event
+    if (this.snapshots.size > this.config.maxSnapshots!) {
+      const sortedSnapshots = Array.from(this.snapshots.values())
+        .sort((a, b) => a.timestamp - b.timestamp);
+      const oldestSnapshot = sortedSnapshots[0];
+      this.snapshots.delete(oldestSnapshot.snapshotId);
+      this.emit('snapshot-deleted', oldestSnapshot.snapshotId);
+    }
+
     this.emit('snapshot-created', snapshot);
-    
     return snapshot;
   }
 
   /**
    * Apply changes from a disc to the state
-   * @param controlId ID of the control applying changes
-   * @param disc The disc to apply
-   * @returns State change record
+   * @param controlId - ID of the control applying changes
+   * @param disc - Disc object or state changes
+   * @returns StateChange record
+   * @example
+   * const change = await stateManager.applyDiscChanges('control-1', myDisc);
    */
-  applyDiscChanges(controlId: string, disc: Disc): StateChange {
+  async applyDiscChanges(controlId: string, disc: any): Promise<StateChange> {
     const before = this.deepClone(this.currentState);
     
-    // Apply disc transformations (simplified - would need actual disc logic)
-    // For now, we'll store the disc reference in the control state map
-    this.controlStateMap.set(controlId, {
-      disc,
-      appliedAt: Date.now(),
-    });
+    // Merge disc into current state (not replace)
+    if (disc && typeof disc === 'object') {
+      Object.keys(disc).forEach(key => {
+        if (disc[key] === undefined) {
+          delete this.currentState[key];
+        } else {
+          this.currentState[key] = disc[key];
+        }
+      });
+    }
     
     const after = this.deepClone(this.currentState);
     
@@ -140,100 +158,89 @@ export class StateManager extends EventEmitter {
       after,
       changeType: 'apply',
     };
-    
+
     this.changeHistory.push(stateChange);
-    
+    this.controlStateMap.set(controlId, { before, after });
+    this.activeControls.add(controlId);
+
     // Create automatic snapshot
-    this.createSnapshot({ controlId, action: 'apply' });
-    
-    // Emit event
+    await this.createSnapshot({ controlId, changeType: 'apply' });
+
     this.emit('state-changed', stateChange);
-    
     return stateChange;
   }
 
   /**
    * Rollback to a previous state snapshot
-   * @param snapshotId ID of the snapshot to restore
+   * @param snapshotId - ID of the snapshot to restore
    * @throws Error if snapshot not found
    * @example
-   * ```typescript
-   * stateManager.rollbackToSnapshot('snapshot-123');
-   * ```
+   * await stateManager.rollbackToSnapshot('snapshot-123');
    */
-  rollbackToSnapshot(snapshotId: string): void {
+  async rollbackToSnapshot(snapshotId: string): Promise<void> {
     const snapshot = this.snapshots.get(snapshotId);
     
     if (!snapshot) {
       throw new Error(`Snapshot not found: ${snapshotId}`);
     }
-    
-    // Store current state before rollback
+
     const before = this.deepClone(this.currentState);
-    
-    // Restore state from snapshot
     this.currentState = this.deepClone(snapshot.state);
-    
-    // Create rollback record in change history
-    const rollbackChange: StateChange = {
+    this.activeControls = new Set(snapshot.activeControls);
+
+    const stateChange: StateChange = {
       controlId: `rollback-${snapshotId}`,
       timestamp: Date.now(),
       before,
-      after: this.currentState,
+      after: this.deepClone(this.currentState),
       changeType: 'revert',
     };
+
+    this.changeHistory.push(stateChange);
     
-    this.changeHistory.push(rollbackChange);
-    
-    // Create new snapshot of rollback
-    this.createSnapshot({ action: 'rollback', sourceSnapshot: snapshotId });
-    
-    // Emit event
-    this.emit('snapshot-restored', { snapshotId, snapshot });
+    // Create new snapshot of the rolled-back state
+    await this.createSnapshot({ rollbackTo: snapshotId });
+
+    this.emit('snapshot-restored', snapshotId);
   }
 
   /**
    * Revert changes from a specific control
-   * @param controlId ID of the control to revert
-   * @returns State change record
+   * @param controlId - ID of the control to revert
+   * @returns StateChange record
    * @throws Error if control not found
    */
-  revertControlChanges(controlId: string): StateChange {
+  async revertControlChanges(controlId: string): Promise<StateChange> {
     const controlState = this.controlStateMap.get(controlId);
     
     if (!controlState) {
       throw new Error(`Control not found: ${controlId}`);
     }
-    
+
     const before = this.deepClone(this.currentState);
-    
-    // Remove control from state map
-    this.controlStateMap.delete(controlId);
-    
-    const after = this.deepClone(this.currentState);
+    this.currentState = this.deepClone(controlState.before);
     
     const stateChange: StateChange = {
       controlId,
       timestamp: Date.now(),
       before,
-      after,
+      after: this.deepClone(this.currentState),
       changeType: 'revert',
     };
-    
+
     this.changeHistory.push(stateChange);
-    
-    // Create snapshot
-    this.createSnapshot({ controlId, action: 'revert' });
-    
-    // Emit event
+    this.controlStateMap.delete(controlId);
+    this.activeControls.delete(controlId);
+
+    await this.createSnapshot({ controlId, changeType: 'revert' });
+
     this.emit('state-changed', stateChange);
-    
     return stateChange;
   }
 
   /**
    * Get change history for a specific control
-   * @param controlId ID of the control
+   * @param controlId - ID of the control
    * @returns Array of state changes
    */
   getControlHistory(controlId: string): StateChange[] {
@@ -242,23 +249,19 @@ export class StateManager extends EventEmitter {
 
   /**
    * Get a specific snapshot by ID
-   * @param snapshotId ID of the snapshot
-   * @returns The snapshot or null if not found
+   * @param snapshotId - ID of the snapshot
+   * @returns StateSnapshot or null if not found
    */
-  getSnapshot(snapshotId: string): StateSnapshot | null {
+  async getSnapshot(snapshotId: string): Promise<StateSnapshot | null> {
     return this.snapshots.get(snapshotId) ?? null;
   }
 
   /**
    * List snapshots with optional filtering
-   * @param filter Optional filters for snapshots
-   * @returns Array of matching snapshots
+   * @param filter - Optional filter criteria
+   * @returns Array of snapshots matching the filter
    * @example
-   * ```typescript
-   * const recent = stateManager.listSnapshots({ 
-   *   startTime: Date.now() - 86400000 
-   * });
-   * ```
+   * const snapshots = await stateManager.listSnapshots({ startTime: Date.now() - 86400000 });
    */
   async listSnapshots(filter?: { 
     controlId?: string; 
@@ -266,86 +269,71 @@ export class StateManager extends EventEmitter {
     endTime?: number;
   }): Promise<StateSnapshot[]> {
     let snapshots = Array.from(this.snapshots.values());
-    
-    if (filter?.controlId) {
-      snapshots = snapshots.filter(s => 
-        s.activeControls.includes(filter.controlId!)
-      );
+
+    if (filter) {
+      if (filter.controlId) {
+        snapshots = snapshots.filter(s => 
+          s.activeControls.includes(filter.controlId!)
+        );
+      }
+      if (filter.startTime) {
+        snapshots = snapshots.filter(s => s.timestamp >= filter.startTime!);
+      }
+      if (filter.endTime) {
+        snapshots = snapshots.filter(s => s.timestamp <= filter.endTime!);
+      }
     }
-    
-    if (filter?.startTime !== undefined) {
-      snapshots = snapshots.filter(s => s.timestamp >= filter.startTime!);
-    }
-    
-    if (filter?.endTime !== undefined) {
-      snapshots = snapshots.filter(s => s.timestamp <= filter.endTime!);
-    }
-    
-    // Sort by timestamp descending (newest first)
-    snapshots.sort((a, b) => b.timestamp - a.timestamp);
-    
-    return snapshots;
+
+    return snapshots.sort((a, b) => b.timestamp - a.timestamp);
   }
 
   /**
    * Calculate diff between two snapshots
-   * @param snapshotIdA First snapshot ID
-   * @param snapshotIdB Second snapshot ID
-   * @returns Array of differences
+   * @param snapshotIdA - ID of first snapshot
+   * @param snapshotIdB - ID of second snapshot
+   * @returns Array of change diffs
    * @throws Error if either snapshot not found
    */
   async diff(snapshotIdA: string, snapshotIdB: string): Promise<ChangeDiff[]> {
     const snapshotA = this.snapshots.get(snapshotIdA);
     const snapshotB = this.snapshots.get(snapshotIdB);
-    
+
     if (!snapshotA) {
       throw new Error(`Snapshot not found: ${snapshotIdA}`);
     }
-    
     if (!snapshotB) {
       throw new Error(`Snapshot not found: ${snapshotIdB}`);
     }
-    
+
     return this.calculateDiff(snapshotA.state, snapshotB.state);
   }
 
   /**
-   * Clean up old snapshots based on retention period
-   * @param retentionDays Number of days to retain snapshots
+   * Remove snapshots older than retention period
+   * @param retentionDays - Number of days to retain snapshots
    * @returns Number of snapshots removed
    * @example
-   * ```typescript
-   * const removed = await stateManager.cleanup(30); // Keep last 30 days
-   * ```
+   * const removed = await stateManager.cleanup(30); // Remove snapshots older than 30 days
    */
   async cleanup(retentionDays: number): Promise<number> {
     const cutoffTime = Date.now() - (retentionDays * 24 * 60 * 60 * 1000);
-    let removedCount = 0;
-    
-    for (const [snapshotId, snapshot] of this.snapshots.entries()) {
+    const snapshots = Array.from(this.snapshots.values());
+    let removed = 0;
+
+    for (const snapshot of snapshots) {
       if (snapshot.timestamp < cutoffTime) {
-        this.snapshots.delete(snapshotId);
-        removedCount++;
-        this.emit('snapshot-deleted', { snapshotId, snapshot });
+        this.snapshots.delete(snapshot.snapshotId);
+        this.emit('snapshot-deleted', snapshot.snapshotId);
+        removed++;
       }
     }
-    
-    return removedCount;
-  }
 
-  /**
-   * Calculate diff between two states
-   * @param beforeState State before change
-   * @param afterState State after change
-   * @returns Array of differences
-   */
-  calculateDiff(beforeState: any, afterState: any): ChangeDiff[] {
-    return this.calculateDiffRecursive(beforeState, afterState, '');
+    return removed;
   }
 
   /**
    * Get state for a specific control
-   * @param controlId ID of the control
+   * @param controlId - ID of the control
    * @returns Control state or null if not found
    */
   getControlState(controlId: string): any | null {
@@ -353,27 +341,108 @@ export class StateManager extends EventEmitter {
   }
 
   /**
-   * Clear old snapshots beyond retention limit
+   * Calculate diff between two states
    * @private
    */
-  private pruneSnapshots(): void {
-    const maxSnapshots = this.config.maxSnapshots!;
-    
-    if (this.snapshots.size <= maxSnapshots) {
-      return;
+  private calculateDiff(beforeState: any, afterState: any, basePath = ''): ChangeDiff[] {
+    const diffs: ChangeDiff[] = [];
+
+    // Handle null/undefined cases
+    if (beforeState === null || beforeState === undefined) {
+      if (afterState !== null && afterState !== undefined) {
+        diffs.push({ path: basePath || 'root', type: 'added', after: afterState });
+      }
+      return diffs;
     }
-    
-    // Sort snapshots by timestamp
-    const sortedSnapshots = Array.from(this.snapshots.entries())
-      .sort(([, a], [, b]) => a.timestamp - b.timestamp);
-    
-    // Remove oldest snapshots
-    const toRemove = sortedSnapshots.slice(0, this.snapshots.size - maxSnapshots);
-    
-    for (const [snapshotId, snapshot] of toRemove) {
-      this.snapshots.delete(snapshotId);
-      this.emit('snapshot-deleted', { snapshotId, snapshot });
+
+    if (afterState === null || afterState === undefined) {
+      diffs.push({ path: basePath || 'root', type: 'removed', before: beforeState });
+      return diffs;
     }
+
+    // Handle primitive types
+    if (typeof beforeState !== 'object' || typeof afterState !== 'object') {
+      if (beforeState !== afterState) {
+        diffs.push({
+          path: basePath || 'root',
+          type: 'modified',
+          before: beforeState,
+          after: afterState,
+        });
+      }
+      return diffs;
+    }
+
+    // Handle objects
+    const beforeKeys = Object.keys(beforeState);
+    const afterKeys = Object.keys(afterState);
+    const allKeys = Array.from(new Set([...beforeKeys, ...afterKeys]));
+
+    for (const key of allKeys) {
+      const newPath = basePath ? `${basePath}.${key}` : key;
+
+      if (!(key in beforeState)) {
+        diffs.push({ path: newPath, type: 'added', after: afterState[key] });
+      } else if (!(key in afterState)) {
+        diffs.push({ path: newPath, type: 'removed', before: beforeState[key] });
+      } else if (typeof beforeState[key] === 'object' && typeof afterState[key] === 'object') {
+        // Recursive diff for nested objects
+        diffs.push(...this.calculateDiff(beforeState[key], afterState[key], newPath));
+      } else if (beforeState[key] !== afterState[key]) {
+        diffs.push({
+          path: newPath,
+          type: 'modified',
+          before: beforeState[key],
+          after: afterState[key],
+        });
+      }
+    }
+
+    return diffs;
+  }
+
+  /**
+   * Deep clone an object to prevent mutations
+   * @private
+   */
+  private deepClone(obj: any): any {
+    if (obj === null || typeof obj !== 'object') {
+      return obj;
+    }
+
+    // Handle circular references and complex objects
+    if (obj instanceof Date) {
+      return new Date(obj.getTime());
+    }
+
+    if (obj instanceof Array) {
+      return obj.map(item => this.deepClone(item));
+    }
+
+    if (obj instanceof Map) {
+      const cloned = new Map();
+      obj.forEach((value, key) => {
+        cloned.set(key, this.deepClone(value));
+      });
+      return cloned;
+    }
+
+    if (obj instanceof Set) {
+      const cloned = new Set();
+      obj.forEach(value => {
+        cloned.add(this.deepClone(value));
+      });
+      return cloned;
+    }
+
+    const cloned: any = {};
+    for (const key in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        cloned[key] = this.deepClone(obj[key]);
+      }
+    }
+
+    return cloned;
   }
 
   /**
@@ -382,128 +451,5 @@ export class StateManager extends EventEmitter {
    */
   private generateSnapshotId(): string {
     return `snapshot-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
-  }
-
-  /**
-   * Deep clone an object to prevent mutations
-   * Handles circular references
-   * @private
-   */
-  private deepClone(obj: any, seen = new WeakMap()): any {
-    // Handle primitives and null
-    if (obj === null || typeof obj !== 'object') {
-      return obj;
-    }
-    
-    // Handle circular references
-    if (seen.has(obj)) {
-      return seen.get(obj);
-    }
-    
-    // Handle Date
-    if (obj instanceof Date) {
-      return new Date(obj.getTime());
-    }
-    
-    // Handle Array
-    if (Array.isArray(obj)) {
-      const arrCopy: any[] = [];
-      seen.set(obj, arrCopy);
-      obj.forEach((item, index) => {
-        arrCopy[index] = this.deepClone(item, seen);
-      });
-      return arrCopy;
-    }
-    
-    // Handle Map
-    if (obj instanceof Map) {
-      const mapCopy = new Map();
-      seen.set(obj, mapCopy);
-      obj.forEach((value, key) => {
-        mapCopy.set(this.deepClone(key, seen), this.deepClone(value, seen));
-      });
-      return mapCopy;
-    }
-    
-    // Handle Set
-    if (obj instanceof Set) {
-      const setCopy = new Set();
-      seen.set(obj, setCopy);
-      obj.forEach(value => {
-        setCopy.add(this.deepClone(value, seen));
-      });
-      return setCopy;
-    }
-    
-    // Handle Object
-    const objCopy: any = {};
-    seen.set(obj, objCopy);
-    Object.keys(obj).forEach(key => {
-      objCopy[key] = this.deepClone(obj[key], seen);
-    });
-    
-    return objCopy;
-  }
-
-  /**
-   * Recursively calculate diff between two objects
-   * @private
-   */
-  private calculateDiffRecursive(
-    before: any, 
-    after: any, 
-    path: string
-  ): ChangeDiff[] {
-    const diffs: ChangeDiff[] = [];
-    
-    // Handle null/undefined cases
-    if (before === null || before === undefined) {
-      if (after !== null && after !== undefined) {
-        diffs.push({ path, type: 'added', newValue: after });
-      }
-      return diffs;
-    }
-    
-    if (after === null || after === undefined) {
-      diffs.push({ path, type: 'removed', oldValue: before });
-      return diffs;
-    }
-    
-    // Handle primitive types
-    if (typeof before !== 'object' || typeof after !== 'object') {
-      if (before !== after) {
-        diffs.push({ path, type: 'modified', oldValue: before, newValue: after });
-      }
-      return diffs;
-    }
-    
-    // Handle objects
-    const allKeys = new Set([
-      ...Object.keys(before),
-      ...Object.keys(after)
-    ]);
-    
-    for (const key of allKeys) {
-      const newPath = path ? `${path}.${key}` : key;
-      const beforeVal = before[key];
-      const afterVal = after[key];
-      
-      if (!(key in before)) {
-        diffs.push({ path: newPath, type: 'added', newValue: afterVal });
-      } else if (!(key in after)) {
-        diffs.push({ path: newPath, type: 'removed', oldValue: beforeVal });
-      } else if (typeof beforeVal === 'object' && typeof afterVal === 'object') {
-        diffs.push(...this.calculateDiffRecursive(beforeVal, afterVal, newPath));
-      } else if (beforeVal !== afterVal) {
-        diffs.push({ 
-          path: newPath, 
-          type: 'modified', 
-          oldValue: beforeVal, 
-          newValue: afterVal 
-        });
-      }
-    }
-    
-    return diffs;
   }
 }

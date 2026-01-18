@@ -26,51 +26,60 @@ yarn add universal-dj-layer
 
 ## 🚀 Quick Start
 
-### Basic Usage
+### StateManager & AuditLog (Foundation)
 
 ```typescript
-import { StateManager, AuditLog } from 'universal-dj-layer';
+import { StateManager } from 'universal-dj-layer/core/state-manager';
+import { AuditLog } from 'universal-dj-layer/audit/audit-log';
 
-// Initialize StateManager for snapshots and rollback
+// Initialize core modules
 const stateManager = new StateManager({
   maxSnapshots: 100,
   enablePersistence: false
 });
 
-// Initialize AuditLog for compliance and debugging
 const auditLog = new AuditLog({
+  enabled: true,
   retentionDays: 365,
   includeSensitiveData: false
 });
 
-// Create a snapshot before making changes
-const snapshot = stateManager.createSnapshot({
-  reason: 'Before applying feature toggle',
-  createdBy: 'user-123'
+// Create a snapshot before changes
+const snapshot = await stateManager.createSnapshot({
+  reason: 'before feature deployment'
 });
 
-// Apply a change
-const disc = { name: 'dark-mode', enabled: true };
-const stateChange = stateManager.applyDiscChanges('control-1', disc);
+// Apply changes and track them
+const change = await stateManager.applyDiscChanges('feature-toggle', {
+  darkMode: true,
+  betaFeatures: ['advanced-search', 'real-time-collab']
+});
 
 // Log the operation
 await auditLog.log({
   action: 'apply',
-  actorId: 'user-123',
+  actorId: 'admin@example.com',
   actorRole: 'admin',
-  controlId: 'control-1',
+  controlId: 'feature-toggle',
   result: 'success',
   changes: {
-    before: stateChange.before,
-    after: stateChange.after
+    before: change.before,
+    after: change.after
   }
 });
 
 // Rollback if needed
-stateManager.rollbackToSnapshot(snapshot.snapshotId);
+await stateManager.rollbackToSnapshot(snapshot.snapshotId);
+await auditLog.log({
+  action: 'revert',
+  actorId: 'admin@example.com',
+  actorRole: 'admin',
+  result: 'success',
+  metadata: { snapshotId: snapshot.snapshotId }
+});
 ```
 
-### DJEngine Integration (Coming Soon)
+### DJEngine (Coming Soon)
 
 ```typescript
 import { DJEngine, FeatureDisc, CreatorRole } from 'universal-dj-layer';
@@ -174,57 +183,50 @@ const controls = await dj.listControls({ status: 'active' });
 
 ## 📊 Observability & Audit
 
-### State Management
+### StateManager - Snapshots & Rollback
 
-Track and rollback state changes with StateManager:
+Create point-in-time snapshots and rollback when needed:
 
 ```typescript
-import { StateManager } from 'universal-dj-layer';
+import { StateManager } from 'universal-dj-layer/core/state-manager';
 
 const stateManager = new StateManager();
 
-// Create snapshots
-const snapshot = stateManager.createSnapshot({
-  reason: 'Before deployment',
-  createdBy: 'user-123'
+// Create snapshot
+const snapshot = await stateManager.createSnapshot({
+  reason: 'before deployment',
+  author: 'admin@example.com'
 });
+
+// Get current state
+const state = await stateManager.getCurrentState();
 
 // List snapshots with filters
 const recent = await stateManager.listSnapshots({
   startTime: Date.now() - 86400000, // Last 24 hours
-  controlId: 'control-1'
+  controlId: 'feature-123'
 });
 
-// Calculate diffs between states
-const diffs = await stateManager.diff('snapshot-1', 'snapshot-2');
-diffs.forEach(diff => {
-  console.log(`${diff.path}: ${diff.type}`);
-  // value.nested: modified
-  // newField: added
-});
+// Calculate diff between snapshots
+const diffs = await stateManager.diff(snapshot1.snapshotId, snapshot2.snapshotId);
 
-// Rollback to previous state
-stateManager.rollbackToSnapshot(snapshot.snapshotId);
+// Rollback
+await stateManager.rollbackToSnapshot(snapshot.snapshotId);
 
-// Listen to events
-stateManager.on('snapshot-created', (snapshot) => {
-  console.log('Snapshot created:', snapshot.snapshotId);
-});
-
-stateManager.on('state-changed', (change) => {
-  console.log('State changed:', change.controlId);
-});
+// Cleanup old snapshots
+const removed = await stateManager.cleanup(30); // 30 days retention
 ```
 
-### Audit Log
+### AuditLog - Complete Audit Trail
 
 Every action is automatically logged with full context:
 
 ```typescript
-import { AuditLog } from 'universal-dj-layer';
+import { AuditLog } from 'universal-dj-layer/audit/audit-log';
 
 const auditLog = new AuditLog({
-  retentionDays: 90,
+  enabled: true,
+  retentionDays: 365,
   includeSensitiveData: false
 });
 
@@ -234,38 +236,71 @@ await auditLog.log({
   actorId: 'user-123',
   actorRole: 'admin',
   controlId: 'ctrl-456',
-  discType: 'FeatureDisc',
+  discType: 'feature',
   result: 'success',
-  changes: {
-    before: { enabled: false },
-    after: { enabled: true }
-  }
+  changes: { before: {...}, after: {...} },
+  metadata: { reason: 'production deployment' }
 });
 
-// Query audit logs
+// Query audit log
 const entries = await auditLog.query({
   actorId: 'user-123',
-  action: 'apply',
   startTime: Date.now() - 86400000,
+  action: 'apply',
+  result: 'success',
   limit: 50
 });
 
-// Stream real-time events
-await auditLog.stream((entry) => {
+// Stream audit events in real-time
+const unsubscribe = await auditLog.stream((entry) => {
+  console.log('New audit event:', entry.action, entry.actorId);
   if (entry.result === 'failure') {
-    console.error('Operation failed:', entry);
+    alertSystem.notify(entry);
   }
 });
 
-// Export for compliance
+// Export audit log
 const jsonExport = await auditLog.export('json', {
-  startTime: Date.now() - 2592000000 // Last 30 days
+  startTime: Date.now() - 604800000 // Last 7 days
 });
 
-const csvExport = await auditLog.export('csv');
+const csvExport = await auditLog.export('csv', {
+  actorId: 'user-123'
+});
+
+// Cleanup old entries
+const removed = await auditLog.cleanup(90); // 90 days retention
 ```
 
-### DJEngine Integration (Coming Soon)
+### Event Hooks
+
+Both modules emit events for real-time monitoring:
+
+```typescript
+// StateManager events
+stateManager.on('snapshot-created', (snapshot) => {
+  console.log('New snapshot:', snapshot.snapshotId);
+});
+
+stateManager.on('state-changed', (change) => {
+  console.log('State changed:', change.controlId);
+});
+
+stateManager.on('snapshot-restored', (snapshotId) => {
+  console.log('Rolled back to:', snapshotId);
+});
+
+// AuditLog events
+auditLog.on('audit-logged', (entry) => {
+  console.log('Logged:', entry.action, 'by', entry.actorId);
+});
+
+auditLog.on('audit-query', (options) => {
+  console.log('Query executed with filters:', options);
+});
+```
+
+### DJEngine Audit (Coming Soon)
 
 ```typescript
 const auditLog = await dj.getAuditLog({
@@ -290,7 +325,7 @@ const auditLog = await dj.getAuditLog({
 // }
 ```
 
-### Change History & Diffs
+### Change History & Diffs (Coming Soon)
 
 ```typescript
 const history = await dj.getChangeHistory(controlId);
@@ -321,10 +356,10 @@ Built-in guardrails prevent common mistakes:
 
 ### Phase 1: Core Foundation ✅
 - [x] Architecture design
-- [x] StateManager implementation with snapshot/rollback
-- [x] AuditLog implementation with querying and streaming
-- [x] Comprehensive test suite (>90% coverage)
-- [x] Foundation documentation
+- [x] StateManager implementation (snapshots, rollback, diffs)
+- [x] AuditLog implementation (logging, filtering, export)
+- [x] Comprehensive test coverage (>90%)
+- [x] Full documentation
 - [ ] Core engine implementation
 - [ ] Basic disc types
 - [ ] Role system
@@ -383,7 +418,9 @@ MIT © 2026 Carolina Telleria
 
 ## 🔗 Resources
 
-- Documentation (coming soon)
+- [Foundation Documentation](./docs/FOUNDATION.md) - StateManager & AuditLog guide
+- [Architecture Documentation](./ARCHITECTURE.md)
+- [Integration Guide](./INTEGRATION.md)
 - Examples (coming soon)
 - API Reference (coming soon)
 - Community Discord (coming soon)

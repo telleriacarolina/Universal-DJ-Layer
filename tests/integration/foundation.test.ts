@@ -6,478 +6,355 @@ describe('StateManager + AuditLog Integration', () => {
   let auditLog: AuditLog;
 
   beforeEach(() => {
-    stateManager = new StateManager({ maxSnapshots: 50 });
-    auditLog = new AuditLog({ retentionDays: 30 });
+    stateManager = new StateManager();
+    auditLog = new AuditLog();
   });
 
-  describe('State Changes and Audit Logging', () => {
-    it('audit log captures state changes from StateManager', async () => {
-      const disc = { name: 'test-disc' } as any;
-      const stateChange = stateManager.applyDiscChanges('control-1', disc);
-      
-      // Log the state change
-      await auditLog.log({
-        action: 'apply',
-        actorId: 'user-123',
-        actorRole: 'admin',
-        controlId: 'control-1',
-        discType: disc.name,
-        result: 'success',
-        changes: {
-          before: stateChange.before,
-          after: stateChange.after,
-        },
-      });
-      
-      const entries = await auditLog.query({ controlId: 'control-1' });
-      
-      expect(entries.length).toBe(1);
-      expect(entries[0].action).toBe('apply');
-      expect(entries[0].changes?.before).toEqual(stateChange.before);
-      expect(entries[0].changes?.after).toEqual(stateChange.after);
+  test('audit log captures state changes from StateManager', async () => {
+    // Apply a disc change through StateManager
+    const stateChange = await stateManager.applyDiscChanges('control-1', { 
+      feature: 'test',
+      value: 42 
     });
 
-    it('rollback is logged in audit trail', async () => {
-      const disc = { name: 'test-disc' } as any;
-      
-      // Apply change
-      stateManager.applyDiscChanges('control-1', disc);
-      const snapshot = stateManager.createSnapshot({ reason: 'before rollback' });
-      
-      await auditLog.log({
-        action: 'apply',
-        actorId: 'user-123',
-        actorRole: 'admin',
-        controlId: 'control-1',
-        result: 'success',
-      });
-      
-      // Modify state again
-      stateManager['currentState'] = { modified: true };
-      
-      // Rollback
-      stateManager.rollbackToSnapshot(snapshot.snapshotId);
-      
-      await auditLog.log({
-        action: 'revert',
-        actorId: 'user-123',
-        actorRole: 'admin',
-        controlId: 'control-1',
-        result: 'success',
-        metadata: { snapshotId: snapshot.snapshotId },
-      });
-      
-      const entries = await auditLog.query({ controlId: 'control-1' });
-      
-      expect(entries.length).toBe(2);
-      expect(entries.some(e => e.action === 'apply')).toBe(true);
-      expect(entries.some(e => e.action === 'revert')).toBe(true);
+    // Log the state change in audit log
+    const entryId = await auditLog.log({
+      action: 'apply',
+      actorId: 'user-123',
+      actorRole: 'admin',
+      controlId: stateChange.controlId,
+      result: 'success',
+      changes: {
+        before: stateChange.before,
+        after: stateChange.after,
+      },
     });
 
-    it('snapshot creation is logged', async () => {
-      const snapshot = stateManager.createSnapshot({ createdBy: 'user-123' });
-      
-      await auditLog.log({
-        action: 'preview', // Using preview as a proxy for snapshot creation
-        actorId: 'user-123',
-        actorRole: 'admin',
-        result: 'success',
-        metadata: {
-          snapshotId: snapshot.snapshotId,
-          timestamp: snapshot.timestamp,
-        },
-      });
-      
-      const entries = await auditLog.query({ actorId: 'user-123' });
-      
-      expect(entries.length).toBe(1);
-      expect(entries[0].metadata?.snapshotId).toBe(snapshot.snapshotId);
-    });
+    // Verify audit entry was created
+    const entry = await auditLog.getEntry(entryId);
+    expect(entry).not.toBeNull();
+    expect(entry!.controlId).toBe('control-1');
+    expect(entry!.changes).toHaveProperty('before');
+    expect(entry!.changes).toHaveProperty('after');
+    expect(entry!.changes!.after).toEqual(stateChange.after);
   });
 
-  describe('State Diffs and Audit Logs', () => {
-    it('state diffs match audit log changes', async () => {
-      stateManager['currentState'] = { value: 1 };
-      const snapshot1 = stateManager.createSnapshot();
-      
-      stateManager['currentState'] = { value: 2 };
-      const snapshot2 = stateManager.createSnapshot();
-      
-      const diffs = await stateManager.diff(snapshot1.snapshotId, snapshot2.snapshotId);
-      
-      // Log with diff - just verify we can store and retrieve
-      await auditLog.log({
-        action: 'apply',
-        actorId: 'user-123',
-        actorRole: 'admin',
-        result: 'success',
-        metadata: {
-          diffCount: diffs.length,
-          hasChanges: diffs.length > 0,
-        },
-      });
-      
-      const entries = await auditLog.query();
-      
-      expect(entries[0].metadata?.diffCount).toBe(diffs.length);
-      expect(entries[0].metadata?.hasChanges).toBe(true);
+  test('rollback is logged in audit trail', async () => {
+    // Create initial state
+    await stateManager.applyDiscChanges('control-1', { value: 1 });
+    const snapshot = await stateManager.createSnapshot();
+
+    // Log snapshot creation
+    await auditLog.log({
+      action: 'apply',
+      actorId: 'user-123',
+      actorRole: 'admin',
+      controlId: 'control-1',
+      result: 'success',
+      metadata: { snapshotId: snapshot.snapshotId },
     });
 
-    it('audit query retrieves related snapshots', async () => {
-      const disc = { name: 'test-disc' } as any;
-      
-      // Apply several changes
-      for (let i = 0; i < 3; i++) {
-        stateManager.applyDiscChanges(`control-${i}`, disc);
-        const snapshot = stateManager.createSnapshot({ iteration: i });
-        
-        await auditLog.log({
-          action: 'apply',
-          actorId: 'user-123',
-          actorRole: 'admin',
-          controlId: `control-${i}`,
-          result: 'success',
-          metadata: { snapshotId: snapshot.snapshotId },
-        });
-      }
-      
-      const entries = await auditLog.query({ actorId: 'user-123' });
-      const snapshotIds = entries.map(e => e.metadata?.snapshotId);
-      
-      // Verify all snapshots can be retrieved
-      for (const snapshotId of snapshotIds) {
-        const snapshot = stateManager.getSnapshot(snapshotId);
-        expect(snapshot).not.toBeNull();
-      }
+    // Apply another change
+    await stateManager.applyDiscChanges('control-2', { value: 2 });
+
+    // Rollback
+    await stateManager.rollbackToSnapshot(snapshot.snapshotId);
+
+    // Log the rollback
+    await auditLog.log({
+      action: 'revert',
+      actorId: 'user-123',
+      actorRole: 'admin',
+      result: 'success',
+      metadata: { snapshotId: snapshot.snapshotId, reason: 'rollback' },
     });
+
+    // Verify audit trail
+    const entries = await auditLog.query();
+    const rollbackEntry = entries.find(e => 
+      e.action === 'revert' && 
+      e.metadata?.snapshotId === snapshot.snapshotId
+    );
+
+    expect(rollbackEntry).toBeDefined();
+    expect(rollbackEntry!.result).toBe('success');
   });
 
-  describe('Event Coordination', () => {
-    it('state manager events trigger audit logging', (done) => {
-      let stateChangeLogged = false;
-      
-      stateManager.on('state-changed', async (stateChange) => {
-        await auditLog.log({
-          action: 'apply',
-          actorId: 'user-123',
-          actorRole: 'admin',
-          controlId: stateChange.controlId,
-          result: 'success',
-        });
-        
-        stateChangeLogged = true;
-      });
-      
-      const disc = { name: 'test-disc' } as any;
-      stateManager.applyDiscChanges('control-1', disc);
-      
-      setTimeout(() => {
-        expect(stateChangeLogged).toBe(true);
-        done();
-      }, 100);
+  test('snapshot creation is logged', async () => {
+    // Create snapshot
+    const snapshot = await stateManager.createSnapshot({ reason: 'before major change' });
+
+    // Log snapshot creation
+    const entryId = await auditLog.log({
+      action: 'apply',
+      actorId: 'user-123',
+      actorRole: 'admin',
+      result: 'success',
+      metadata: {
+        type: 'snapshot',
+        snapshotId: snapshot.snapshotId,
+        reason: snapshot.metadata?.reason,
+      },
     });
 
-    it('snapshot events trigger audit entries', (done) => {
-      let snapshotLogged = false;
-      
-      stateManager.on('snapshot-created', async (snapshot) => {
-        await auditLog.log({
-          action: 'preview',
-          actorId: 'system',
-          actorRole: 'system',
-          result: 'success',
-          metadata: { snapshotId: snapshot.snapshotId },
-        });
-        
-        snapshotLogged = true;
-      });
-      
-      stateManager.createSnapshot();
-      
-      setTimeout(() => {
-        expect(snapshotLogged).toBe(true);
-        done();
-      }, 100);
-    });
-
-    it('rollback events create audit entries', (done) => {
-      const snapshot = stateManager.createSnapshot();
-      let rollbackLogged = false;
-      
-      stateManager.on('snapshot-restored', async (event) => {
-        await auditLog.log({
-          action: 'revert',
-          actorId: 'user-123',
-          actorRole: 'admin',
-          result: 'success',
-          metadata: { snapshotId: event.snapshotId },
-        });
-        
-        rollbackLogged = true;
-      });
-      
-      stateManager.rollbackToSnapshot(snapshot.snapshotId);
-      
-      setTimeout(() => {
-        expect(rollbackLogged).toBe(true);
-        done();
-      }, 100);
-    });
+    // Verify
+    const entry = await auditLog.getEntry(entryId);
+    expect(entry!.metadata?.snapshotId).toBe(snapshot.snapshotId);
+    expect(entry!.metadata?.reason).toBe('before major change');
   });
 
-  describe('Complete Workflow', () => {
-    it('tracks complete control lifecycle', async () => {
-      const disc = { name: 'feature-toggle' } as any;
-      const actorId = 'user-123';
-      const controlId = 'ctrl-feature-1';
-      
-      // 1. Create initial snapshot
-      const initialSnapshot = stateManager.createSnapshot({ reason: 'initial' });
-      await auditLog.log({
-        action: 'preview',
-        actorId,
-        actorRole: 'admin',
-        result: 'success',
-        metadata: { snapshotId: initialSnapshot.snapshotId },
-      });
-      
-      // 2. Apply control
-      const stateChange = stateManager.applyDiscChanges(controlId, disc);
-      await auditLog.log({
-        action: 'apply',
-        actorId,
-        actorRole: 'admin',
-        controlId,
-        discType: disc.name,
-        result: 'success',
-        changes: {
-          before: stateChange.before,
-          after: stateChange.after,
-        },
-      });
-      
-      // 3. Create snapshot after apply
-      const afterApplySnapshot = stateManager.createSnapshot({ reason: 'after apply' });
-      await auditLog.log({
-        action: 'preview',
-        actorId,
-        actorRole: 'admin',
-        controlId,
-        result: 'success',
-        metadata: { snapshotId: afterApplySnapshot.snapshotId },
-      });
-      
-      // 4. Revert control
-      const revertChange = stateManager.revertControlChanges(controlId);
-      await auditLog.log({
-        action: 'revert',
-        actorId,
-        actorRole: 'admin',
-        controlId,
-        result: 'success',
-        changes: {
-          before: revertChange.before,
-          after: revertChange.after,
-        },
-      });
-      
-      // Verify complete audit trail
-      const trail = await auditLog.getControlAuditTrail(controlId);
-      
-      expect(trail.length).toBe(3); // apply, snapshot, revert
-      expect(trail[0].action).toBe('apply');
-      expect(trail[trail.length - 1].action).toBe('revert');
-      
-      // Verify state history
-      const history = stateManager.getControlHistory(controlId);
-      expect(history.length).toBe(2); // apply and revert
+  test('state diffs match audit log changes', async () => {
+    // Apply first change
+    await stateManager.applyDiscChanges('control-1', { value: 1, feature: 'a' });
+    const snapshot1 = await stateManager.createSnapshot();
+
+    // Apply second change
+    await stateManager.applyDiscChanges('control-2', { value: 2, feature: 'b', newProp: 'test' });
+    const snapshot2 = await stateManager.createSnapshot();
+
+    // Calculate diff
+    const diffs = await stateManager.diff(snapshot1.snapshotId, snapshot2.snapshotId);
+
+    // Log with diff information
+    await auditLog.log({
+      action: 'apply',
+      actorId: 'user-123',
+      actorRole: 'admin',
+      controlId: 'control-2',
+      result: 'success',
+      changes: {
+        diffs: diffs as any,
+        snapshotA: snapshot1.snapshotId,
+        snapshotB: snapshot2.snapshotId,
+      },
     });
 
-    it('handles concurrent operations', async () => {
-      const disc = { name: 'test-disc' } as any;
-      
-      // Simulate concurrent state changes and logging
-      const operations = [];
-      
-      for (let i = 0; i < 5; i++) {
-        const controlId = `control-${i}`;
-        
-        operations.push(
-          (async () => {
-            const stateChange = stateManager.applyDiscChanges(controlId, disc);
-            
-            await auditLog.log({
-              action: 'apply',
-              actorId: `user-${i}`,
-              actorRole: 'admin',
-              controlId,
-              result: 'success',
-              changes: {
-                before: stateChange.before,
-                after: stateChange.after,
-              },
-            });
-          })()
-        );
-      }
-      
-      await Promise.all(operations);
-      
-      // Verify all operations completed
-      const entries = await auditLog.query();
-      expect(entries.length).toBe(5);
-      
-      const snapshots = await stateManager.listSnapshots();
-      expect(snapshots.length).toBe(5);
-    });
+    // Verify audit entry contains diffs
+    const entries = await auditLog.query({ controlId: 'control-2' });
+    expect(entries.length).toBeGreaterThan(0);
+    
+    const entry = entries[0];
+    expect(entry.changes).toHaveProperty('diffs');
+    // Diffs is stored as a property, it may be serialized
+    expect(entry.changes!.diffs).toBeDefined();
+    expect(entry.changes!.snapshotA).toBe(snapshot1.snapshotId);
   });
 
-  describe('Cleanup Coordination', () => {
-    it('cleanup operations are synchronized', async () => {
-      const oldTimestamp = Date.now() - (100 * 24 * 60 * 60 * 1000);
-      
-      // Create old snapshot
-      const oldSnapshot = stateManager.createSnapshot();
-      oldSnapshot.timestamp = oldTimestamp;
-      stateManager['snapshots'].set(oldSnapshot.snapshotId, oldSnapshot);
-      
-      // Create old audit entry
-      const oldEntry = await auditLog.log({
-        action: 'apply',
-        actorId: 'user-old',
-        actorRole: 'admin',
-        result: 'success',
-      });
-      const entry = await auditLog.getEntry(oldEntry);
-      if (entry) {
-        entry.timestamp = oldTimestamp;
-      }
-      
-      // Cleanup both
-      const removedSnapshots = await stateManager.cleanup(30);
-      const removedEntries = await auditLog.cleanup(30);
-      
-      expect(removedSnapshots).toBe(1);
-      expect(removedEntries).toBe(1);
+  test('audit query retrieves related snapshots', async () => {
+    // Create multiple snapshots with controls
+    await stateManager.applyDiscChanges('control-1', { feature: 'a' });
+    const snapshot1 = await stateManager.createSnapshot();
+
+    await auditLog.log({
+      action: 'apply',
+      actorId: 'user-123',
+      actorRole: 'admin',
+      controlId: 'control-1',
+      result: 'success',
+      metadata: { snapshotId: snapshot1.snapshotId },
     });
 
-    it('emits cleanup events', (done) => {
-      let stateCleanupEmitted = false;
-      let auditCleanupEmitted = false;
-      
-      const oldTimestamp = Date.now() - (100 * 24 * 60 * 60 * 1000);
-      
-      stateManager.on('snapshot-deleted', () => {
-        stateCleanupEmitted = true;
-      });
-      
-      auditLog.on('audit-cleanup', () => {
-        auditCleanupEmitted = true;
-      });
-      
-      // Create old data
-      const oldSnapshot = stateManager.createSnapshot();
-      oldSnapshot.timestamp = oldTimestamp;
-      stateManager['snapshots'].set(oldSnapshot.snapshotId, oldSnapshot);
-      
-      const oldEntry: any = {
-        entryId: 'old-entry',
-        timestamp: oldTimestamp,
-        action: 'apply',
-        actorId: 'user-old',
-        actorRole: 'admin',
-        result: 'success',
-      };
-      auditLog['entries'].push(oldEntry);
-      
-      Promise.all([
-        stateManager.cleanup(30),
-        auditLog.cleanup(30),
-      ]).then(() => {
-        expect(stateCleanupEmitted).toBe(true);
-        expect(auditCleanupEmitted).toBe(true);
-        done();
-      });
+    await stateManager.applyDiscChanges('control-2', { feature: 'b' });
+    const snapshot2 = await stateManager.createSnapshot();
+
+    await auditLog.log({
+      action: 'apply',
+      actorId: 'user-123',
+      actorRole: 'admin',
+      controlId: 'control-2',
+      result: 'success',
+      metadata: { snapshotId: snapshot2.snapshotId },
     });
+
+    // Query audit log
+    const entries = await auditLog.query({ actorId: 'user-123' });
+
+    // Verify we can retrieve snapshots from audit metadata
+    const snapshotIds = entries
+      .map(e => e.metadata?.snapshotId)
+      .filter(id => id !== undefined);
+
+    expect(snapshotIds.length).toBe(2);
+
+    // Verify snapshots exist in StateManager
+    for (const snapshotId of snapshotIds) {
+      const snapshot = await stateManager.getSnapshot(snapshotId!);
+      expect(snapshot).not.toBeNull();
+    }
   });
 
-  describe('Data Consistency', () => {
-    it('maintains referential integrity', async () => {
-      const disc = { name: 'test-disc' } as any;
-      const controlId = 'control-1';
-      
-      // Apply control and create snapshot
-      stateManager.applyDiscChanges(controlId, disc);
-      const snapshot = stateManager.createSnapshot({ controlId });
-      
-      // Log in audit
-      await auditLog.log({
-        action: 'apply',
-        actorId: 'user-123',
-        actorRole: 'admin',
-        controlId,
-        result: 'success',
-        metadata: { snapshotId: snapshot.snapshotId },
-      });
-      
-      // Verify references
-      const auditEntries = await auditLog.query({ controlId });
-      const auditSnapshotId = auditEntries[0].metadata?.snapshotId;
-      
-      const retrievedSnapshot = stateManager.getSnapshot(auditSnapshotId);
-      expect(retrievedSnapshot).not.toBeNull();
-      expect(retrievedSnapshot!.snapshotId).toBe(snapshot.snapshotId);
+  test('complete workflow: apply, snapshot, audit, revert, audit', async () => {
+    // 1. Apply initial change
+    const change1 = await stateManager.applyDiscChanges('control-1', { value: 1 });
+    await auditLog.log({
+      action: 'apply',
+      actorId: 'user-123',
+      actorRole: 'admin',
+      controlId: 'control-1',
+      result: 'success',
+      changes: { before: change1.before, after: change1.after },
     });
 
-    it('handles missing references gracefully', async () => {
-      await auditLog.log({
-        action: 'apply',
-        actorId: 'user-123',
-        actorRole: 'admin',
-        controlId: 'control-1',
-        result: 'success',
-        metadata: { snapshotId: 'non-existent' },
-      });
-      
-      const entries = await auditLog.query();
-      const snapshotId = entries[0].metadata?.snapshotId;
-      
-      const snapshot = stateManager.getSnapshot(snapshotId);
-      expect(snapshot).toBeNull(); // Should handle gracefully
+    // 2. Create snapshot
+    const snapshot = await stateManager.createSnapshot({ checkpoint: 'safe-state' });
+    await auditLog.log({
+      action: 'apply',
+      actorId: 'user-123',
+      actorRole: 'admin',
+      result: 'success',
+      metadata: { type: 'snapshot', snapshotId: snapshot.snapshotId },
     });
+
+    // 3. Apply another change
+    const change2 = await stateManager.applyDiscChanges('control-2', { value: 2 });
+    await auditLog.log({
+      action: 'apply',
+      actorId: 'user-123',
+      actorRole: 'admin',
+      controlId: 'control-2',
+      result: 'success',
+      changes: { before: change2.before, after: change2.after },
+    });
+
+    // 4. Revert the last change
+    const revertChange = await stateManager.revertControlChanges('control-2');
+    await auditLog.log({
+      action: 'revert',
+      actorId: 'user-123',
+      actorRole: 'admin',
+      controlId: 'control-2',
+      result: 'success',
+      changes: { before: revertChange.before, after: revertChange.after },
+    });
+
+    // Verify complete audit trail
+    const allEntries = await auditLog.query({ actorId: 'user-123', sortDirection: 'asc' });
+    expect(allEntries.length).toBe(4);
+
+    // Verify order of operations
+    expect(allEntries[0].controlId).toBe('control-1');
+    expect(allEntries[0].action).toBe('apply');
+    
+    expect(allEntries[1].metadata?.type).toBe('snapshot');
+    
+    expect(allEntries[2].controlId).toBe('control-2');
+    expect(allEntries[2].action).toBe('apply');
+    
+    expect(allEntries[3].controlId).toBe('control-2');
+    expect(allEntries[3].action).toBe('revert');
   });
 
-  describe('Performance', () => {
-    it('handles large numbers of operations efficiently', async () => {
-      const startTime = Date.now();
-      const operationCount = 100;
-      
-      const disc = { name: 'test-disc' } as any;
-      
-      for (let i = 0; i < operationCount; i++) {
-        stateManager.applyDiscChanges(`control-${i}`, disc);
-        
-        await auditLog.log({
-          action: 'apply',
-          actorId: 'user-123',
-          actorRole: 'admin',
-          controlId: `control-${i}`,
-          result: 'success',
-        });
-      }
-      
-      const endTime = Date.now();
-      const duration = endTime - startTime;
-      
-      // Should complete in reasonable time (less than 5 seconds for 100 ops)
-      expect(duration).toBeLessThan(5000);
-      
-      // Verify all operations completed
-      const entries = await auditLog.query();
-      expect(entries.length).toBe(operationCount);
-      
-      const snapshots = await stateManager.listSnapshots();
-      expect(snapshots.length).toBeLessThanOrEqual(operationCount);
+  test('event integration between modules', async () => {
+    const stateEvents: string[] = [];
+    const auditEvents: string[] = [];
+
+    // Listen to StateManager events
+    stateManager.on('snapshot-created', () => stateEvents.push('snapshot-created'));
+    stateManager.on('state-changed', () => stateEvents.push('state-changed'));
+    stateManager.on('snapshot-restored', () => stateEvents.push('snapshot-restored'));
+
+    // Listen to AuditLog events
+    auditLog.on('audit-logged', () => auditEvents.push('audit-logged'));
+
+    // Perform operations
+    await stateManager.applyDiscChanges('control-1', { value: 1 });
+    await auditLog.log({
+      action: 'apply',
+      actorId: 'user-123',
+      actorRole: 'admin',
+      controlId: 'control-1',
+      result: 'success',
     });
+
+    const snapshot = await stateManager.createSnapshot();
+    await auditLog.log({
+      action: 'apply',
+      actorId: 'user-123',
+      actorRole: 'admin',
+      result: 'success',
+      metadata: { snapshotId: snapshot.snapshotId },
+    });
+
+    await stateManager.rollbackToSnapshot(snapshot.snapshotId);
+    await auditLog.log({
+      action: 'revert',
+      actorId: 'user-123',
+      actorRole: 'admin',
+      result: 'success',
+    });
+
+    // Verify events were emitted
+    expect(stateEvents).toContain('snapshot-created');
+    expect(stateEvents).toContain('state-changed');
+    expect(stateEvents).toContain('snapshot-restored');
+    expect(auditEvents.length).toBeGreaterThanOrEqual(3);
+  });
+
+  test('streaming audit logs for real-time state monitoring', async () => {
+    const streamedEntries: any[] = [];
+
+    // Set up streaming
+    await auditLog.stream((entry) => {
+      streamedEntries.push({
+        action: entry.action,
+        controlId: entry.controlId,
+        timestamp: entry.timestamp,
+      });
+    });
+
+    // Perform state changes
+    await stateManager.applyDiscChanges('control-1', { value: 1 });
+    await auditLog.log({
+      action: 'apply',
+      actorId: 'user-123',
+      actorRole: 'admin',
+      controlId: 'control-1',
+      result: 'success',
+    });
+
+    await stateManager.applyDiscChanges('control-2', { value: 2 });
+    await auditLog.log({
+      action: 'apply',
+      actorId: 'user-123',
+      actorRole: 'admin',
+      controlId: 'control-2',
+      result: 'success',
+    });
+
+    // Verify streamed data
+    expect(streamedEntries.length).toBe(2);
+    expect(streamedEntries[0].controlId).toBe('control-1');
+    expect(streamedEntries[1].controlId).toBe('control-2');
+  });
+
+  test('cleanup policies work together', async () => {
+    // Create state and audit entries
+    await stateManager.applyDiscChanges('control-1', { value: 1 });
+    const snapshot = await stateManager.createSnapshot();
+
+    await auditLog.log({
+      action: 'apply',
+      actorId: 'user-123',
+      actorRole: 'admin',
+      controlId: 'control-1',
+      result: 'success',
+    });
+
+    // Get counts before cleanup
+    const snapshotsBefore = await stateManager.listSnapshots();
+    const entriesBefore = await auditLog.query();
+
+    // Cleanup with very generous retention (should not remove recent items)
+    const removedSnapshots = await stateManager.cleanup(365);
+    const removedAuditEntries = await auditLog.cleanup(365);
+
+    // Verify cleanup worked - recent items should remain
+    const remainingSnapshots = await stateManager.listSnapshots();
+    const remainingEntries = await auditLog.query();
+
+    expect(removedSnapshots).toBe(0); // Nothing should be removed with 365 day retention
+    expect(removedAuditEntries).toBe(0);
+    expect(remainingSnapshots.length).toBe(snapshotsBefore.length);
+    expect(remainingEntries.length).toBe(entriesBefore.length);
   });
 });

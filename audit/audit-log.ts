@@ -68,13 +68,16 @@ export interface AuditLogConfig {
   includeSensitiveData?: boolean;
   /** Custom storage path (for file storage) */
   storagePath?: string;
+  /** Custom list of sensitive fields to redact (optional) */
+  sensitiveFields?: string[];
 }
 
 export class AuditLog extends EventEmitter {
   private config: AuditLogConfig;
   private entries: AuditEntry[] = [];
-  private entryIndex: Map<string, AuditEntry[]> = new Map();
+  private entryIndex: Map<string, AuditEntry> = new Map();
   private streamCallbacks: Set<(entry: AuditEntry) => void> = new Set();
+  private sensitiveFieldsLowercase: string[];
 
   constructor(config: AuditLogConfig = {}) {
     super();
@@ -84,23 +87,27 @@ export class AuditLog extends EventEmitter {
       retentionDays: config.retentionDays ?? 365,
       includeSensitiveData: config.includeSensitiveData ?? false,
       storagePath: config.storagePath,
+      sensitiveFields: config.sensitiveFields,
     };
+
+    // Pre-compute lowercase sensitive fields for performance
+    const defaultSensitiveFields = ['password', 'token', 'secret', 'apiKey', 'privateKey', 'ssn', 'creditCard'];
+    const fields = this.config.sensitiveFields || defaultSensitiveFields;
+    this.sensitiveFieldsLowercase = fields.map(f => f.toLowerCase());
   }
 
   /**
    * Log an audit entry
-   * @param entry Audit entry data (without entryId and timestamp)
-   * @returns The unique entry ID
+   * @param entry - Audit entry without entryId and timestamp (auto-generated)
+   * @returns Promise resolving to the entry ID
    * @example
-   * ```typescript
    * const entryId = await auditLog.log({
    *   action: 'apply',
    *   actorId: 'user-123',
    *   actorRole: 'admin',
-   *   controlId: 'ctrl-456',
+   *   controlId: 'control-456',
    *   result: 'success'
    * });
-   * ```
    */
   async log(entry: Omit<AuditEntry, 'entryId' | 'timestamp'>): Promise<string> {
     if (!this.config.enabled) {
@@ -114,16 +121,26 @@ export class AuditLog extends EventEmitter {
     };
 
     // Sanitize sensitive data if needed
-    if (!this.config.includeSensitiveData) {
+    if (!this.config.includeSensitiveData && fullEntry.changes) {
       fullEntry.changes = this.sanitizeSensitiveData(fullEntry.changes);
-      fullEntry.metadata = this.sanitizeSensitiveData(fullEntry.metadata);
     }
 
     // Add to in-memory array
     this.entries.push(fullEntry);
-    
-    // Update indexes for fast lookups
-    this.updateIndexes(fullEntry);
+    this.entryIndex.set(fullEntry.entryId, fullEntry);
+
+    // Emit event for real-time monitoring
+    this.emit('audit-logged', fullEntry);
+
+    // Notify stream callbacks
+    this.streamCallbacks.forEach(callback => {
+      try {
+        callback(fullEntry);
+      } catch (error) {
+        // Ignore callback errors to prevent breaking audit logging
+        console.error('Stream callback error:', error);
+      }
+    });
 
     // Emit event for real-time monitoring
     this.emit('audit-logged', fullEntry);
@@ -141,20 +158,19 @@ export class AuditLog extends EventEmitter {
   }
 
   /**
-   * Query audit log entries with filtering and pagination
-   * @param options Query options for filtering and pagination
-   * @returns Array of matching audit entries
+   * Query audit log entries with filtering
+   * @param options - Query filter options
+   * @returns Promise resolving to array of matching audit entries
    * @example
-   * ```typescript
    * const entries = await auditLog.query({
    *   actorId: 'user-123',
-   *   action: 'apply',
    *   startTime: Date.now() - 86400000,
    *   limit: 50
    * });
-   * ```
    */
   async query(options: AuditQueryOptions = {}): Promise<AuditEntry[]> {
+    this.emit('audit-query', options);
+
     let filtered = [...this.entries];
 
     // Apply filters
@@ -178,12 +194,10 @@ export class AuditLog extends EventEmitter {
     }
 
     // Sort
-    const sortDirection = options.sortDirection ?? 'desc';
-    if (sortDirection === 'asc') {
-      filtered.sort((a, b) => a.timestamp - b.timestamp);
-    } else {
-      filtered.sort((a, b) => b.timestamp - a.timestamp);
-    }
+    const sortDir = options.sortDirection ?? 'desc';
+    filtered.sort((a, b) => 
+      sortDir === 'asc' ? a.timestamp - b.timestamp : b.timestamp - a.timestamp
+    );
 
     // Emit query event
     this.emit('audit-query', { options, resultCount: filtered.length });
@@ -195,136 +209,140 @@ export class AuditLog extends EventEmitter {
   }
 
   /**
-   * Stream audit entries in real-time
-   * @param callback Function to call for each new audit entry
+   * Stream audit events in real-time
+   * @param callback - Function to call for each new audit entry
+   * @returns Function to unsubscribe from stream
    * @example
-   * ```typescript
-   * auditLog.stream((entry) => {
+   * const unsubscribe = await auditLog.stream((entry) => {
    *   console.log('New audit entry:', entry);
    * });
-   * ```
+   * // Later: unsubscribe();
    */
-  async stream(callback: (entry: AuditEntry) => void): Promise<void> {
+  async stream(callback: (entry: AuditEntry) => void): Promise<() => void> {
     this.streamCallbacks.add(callback);
+    return () => {
+      this.streamCallbacks.delete(callback);
+    };
   }
 
   /**
    * Get a specific audit entry by ID
-   * @param entryId The unique entry ID
-   * @returns The audit entry or null if not found
+   * @param entryId - The entry ID to retrieve
+   * @returns Promise resolving to the audit entry or null if not found
    */
   async getEntry(entryId: string): Promise<AuditEntry | null> {
-    return this.entries.find(e => e.entryId === entryId) ?? null;
+    return this.entryIndex.get(entryId) ?? null;
   }
 
   /**
-   * Clean up old audit entries based on retention policy
-   * @param retentionDays Number of days to retain entries
-   * @returns Number of entries removed
+   * Remove audit entries older than retention period
+   * @param retentionDays - Number of days to retain entries
+   * @returns Promise resolving to number of entries removed
    * @example
-   * ```typescript
-   * const removed = await auditLog.cleanup(90); // Keep last 90 days
-   * ```
+   * const removed = await auditLog.cleanup(90); // Remove entries older than 90 days
    */
   async cleanup(retentionDays: number): Promise<number> {
     const cutoffTime = Date.now() - (retentionDays * 24 * 60 * 60 * 1000);
     const beforeCount = this.entries.length;
     
-    this.entries = this.entries.filter(e => e.timestamp >= cutoffTime);
+    this.entries = this.entries.filter(e => {
+      if (e.timestamp < cutoffTime) {
+        this.entryIndex.delete(e.entryId);
+        return false;
+      }
+      return true;
+    });
+
+    const removed = beforeCount - this.entries.length;
     
-    const removedCount = beforeCount - this.entries.length;
-    
-    // Rebuild indexes after cleanup
-    this.rebuildIndexes();
-    
-    // Emit cleanup event
-    if (removedCount > 0) {
-      this.emit('audit-cleanup', { removedCount, retentionDays });
+    if (removed > 0) {
+      this.emit('audit-cleanup', { removed, retentionDays });
     }
-    
-    return removedCount;
+
+    return removed;
   }
 
   /**
-   * Export audit log to JSON or CSV format
-   * @param format Export format ('json' or 'csv')
-   * @param options Optional query options to filter exported entries
-   * @returns Formatted export string
+   * Export audit log to specified format
+   * @param format - Export format ('json' or 'csv')
+   * @param options - Optional query options to filter exported entries
+   * @returns Promise resolving to formatted string
    * @example
-   * ```typescript
    * const jsonExport = await auditLog.export('json', { actorId: 'user-123' });
    * const csvExport = await auditLog.export('csv');
-   * ```
    */
   async export(format: 'json' | 'csv', options?: AuditQueryOptions): Promise<string> {
-    // Query entries with filters if provided
-    const entriesToExport = options ? await this.query(options) : this.entries;
-    
+    const entries = await this.query(options ?? {});
+
     if (format === 'json') {
-      return JSON.stringify(entriesToExport, null, 2);
-    } else if (format === 'csv') {
-      return this.exportToCsv(entriesToExport);
+      return JSON.stringify(entries, null, 2);
     }
-    
+
+    if (format === 'csv') {
+      if (entries.length === 0) {
+        return '';
+      }
+
+      // CSV header
+      const headers = [
+        'entryId',
+        'timestamp',
+        'action',
+        'actorId',
+        'actorRole',
+        'controlId',
+        'discType',
+        'result',
+        'error',
+        'ipAddress',
+        'userAgent',
+      ];
+
+      const csvLines = [headers.join(',')];
+
+      // CSV rows
+      for (const entry of entries) {
+        const row = [
+          entry.entryId,
+          entry.timestamp.toString(),
+          entry.action,
+          entry.actorId,
+          entry.actorRole,
+          entry.controlId ?? '',
+          entry.discType ?? '',
+          entry.result,
+          entry.error ? `"${entry.error.replace(/"/g, '""')}"` : '',
+          entry.ipAddress ?? '',
+          entry.userAgent ? `"${entry.userAgent.replace(/"/g, '""')}"` : '',
+        ];
+        csvLines.push(row.join(','));
+      }
+
+      return csvLines.join('\n');
+    }
+
     throw new Error(`Unsupported export format: ${format}`);
   }
 
   /**
-   * Get audit trail for a specific control
-   * @param controlId The control ID
-   * @returns Array of audit entries for the control
-   */
-  async getControlAuditTrail(controlId: string): Promise<AuditEntry[]> {
-    return this.query({ controlId, sortDirection: 'asc' });
-  }
-
-  /**
-   * Get audit trail for a specific actor
-   * @param actorId The actor ID
-   * @returns Array of audit entries for the actor
-   */
-  async getActorAuditTrail(actorId: string): Promise<AuditEntry[]> {
-    return this.query({ actorId, sortDirection: 'desc' });
-  }
-
-  /**
-   * Unsubscribe from stream
-   * @param callback The callback to remove
-   */
-  unsubscribe(callback: (entry: AuditEntry) => void): void {
-    this.streamCallbacks.delete(callback);
-  }
-
-  /**
-   * Update indexes for fast lookups
+   * Sanitize sensitive data from changes object
    * @private
    */
-  private updateIndexes(entry: AuditEntry): void {
-    // Control ID index
-    if (entry.controlId) {
-      const controlEntries = this.entryIndex.get(`control:${entry.controlId}`) ?? [];
-      controlEntries.push(entry);
-      this.entryIndex.set(`control:${entry.controlId}`, controlEntries);
+  private sanitizeSensitiveData(changes: Record<string, any>): Record<string, any> {
+    const sanitized: Record<string, any> = {};
+
+    for (const key in changes) {
+      const lowerKey = key.toLowerCase();
+      if (this.sensitiveFieldsLowercase.some(field => lowerKey.includes(field))) {
+        sanitized[key] = '[REDACTED]';
+      } else if (typeof changes[key] === 'object' && changes[key] !== null) {
+        sanitized[key] = this.sanitizeSensitiveData(changes[key]);
+      } else {
+        sanitized[key] = changes[key];
+      }
     }
-    
-    // Actor ID index
-    const actorEntries = this.entryIndex.get(`actor:${entry.actorId}`) ?? [];
-    actorEntries.push(entry);
-    this.entryIndex.set(`actor:${entry.actorId}`, actorEntries);
-    
-    // Action type index
-    const actionEntries = this.entryIndex.get(`action:${entry.action}`) ?? [];
-    actionEntries.push(entry);
-    this.entryIndex.set(`action:${entry.action}`, actionEntries);
-  }
 
-  /**
-   * Rebuild all indexes
-   * @private
-   */
-  private rebuildIndexes(): void {
-    this.entryIndex.clear();
-    this.entries.forEach(entry => this.updateIndexes(entry));
+    return sanitized;
   }
 
   /**
@@ -333,100 +351,5 @@ export class AuditLog extends EventEmitter {
    */
   private generateEntryId(): string {
     return `audit-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
-  }
-
-  /**
-   * Sanitize sensitive data from objects
-   * @private
-   */
-  private sanitizeSensitiveData(data: any): any {
-    if (!data || typeof data !== 'object') {
-      return data;
-    }
-    
-    const sensitiveFields = [
-      'password',
-      'token',
-      'secret',
-      'apiKey',
-      'api_key',
-      'accessToken',
-      'access_token',
-      'privateKey',
-      'private_key',
-      'ssn',
-      'creditCard',
-      'credit_card',
-    ];
-    
-    const sanitized = { ...data };
-    
-    for (const key of Object.keys(sanitized)) {
-      const lowerKey = key.toLowerCase();
-      
-      // Check if key contains sensitive field name
-      if (sensitiveFields.some(field => lowerKey.includes(field.toLowerCase()))) {
-        sanitized[key] = '[REDACTED]';
-      } else if (typeof sanitized[key] === 'object' && sanitized[key] !== null) {
-        sanitized[key] = this.sanitizeSensitiveData(sanitized[key]);
-      }
-    }
-    
-    return sanitized;
-  }
-
-  /**
-   * Export entries to CSV format
-   * @private
-   */
-  private exportToCsv(entries: AuditEntry[]): string {
-    if (entries.length === 0) {
-      return '';
-    }
-    
-    // CSV headers
-    const headers = [
-      'entryId',
-      'timestamp',
-      'action',
-      'actorId',
-      'actorRole',
-      'controlId',
-      'discType',
-      'result',
-      'error',
-      'ipAddress',
-      'userAgent',
-    ];
-    
-    const rows = entries.map(entry => [
-      entry.entryId,
-      new Date(entry.timestamp).toISOString(),
-      entry.action,
-      entry.actorId,
-      entry.actorRole,
-      entry.controlId ?? '',
-      entry.discType ?? '',
-      entry.result,
-      entry.error ?? '',
-      entry.ipAddress ?? '',
-      entry.userAgent ?? '',
-    ]);
-    
-    // Escape CSV values
-    const escapeCsvValue = (value: any): string => {
-      const str = String(value);
-      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-        return `"${str.replace(/"/g, '""')}"`;
-      }
-      return str;
-    };
-    
-    const csvLines = [
-      headers.join(','),
-      ...rows.map(row => row.map(escapeCsvValue).join(','))
-    ];
-    
-    return csvLines.join('\n');
   }
 }
