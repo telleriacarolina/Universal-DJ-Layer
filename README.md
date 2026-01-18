@@ -8,11 +8,13 @@ The **Universal DJ Control Layer** is a headless TypeScript framework that allow
 
 **Key Features:**
 - **Preview-Before-Apply**: Test changes in a sandbox before committing
-- **Reversible Controls**: All modifications can be rolled back instantly
+- **Reversible Controls**: All modifications can be rolled back instantly via StateManager
 - **Creator Locks**: Original creators retain veto power over changes
 - **Role-Based Access Control (RBAC)**: Fine-grained permissions for different user types
-- **Full Audit Trail**: Every change is logged with diff support
+- **Full Audit Trail**: Every change is logged with AuditLog for compliance
 - **Headless Core**: UI optional—core package is entirely backend-focused
+- **State Snapshots**: Point-in-time snapshots with diff calculation
+- **Real-time Streaming**: Monitor audit events in real-time
 
 ## 📦 Installation
 
@@ -382,6 +384,13 @@ Built-in guardrails prevent common mistakes:
 - [ ] Advanced compliance tools
 - [ ] Multi-region support
 - [ ] Enterprise audit features
+
+## 📚 Documentation
+
+- **[Foundation Documentation](./docs/FOUNDATION.md)**: Comprehensive guide to StateManager and AuditLog
+- **[Architecture Overview](./ARCHITECTURE.md)**: System design and architecture
+- **[Integration Guide](./INTEGRATION.md)**: How to integrate with your application
+- **[Implementation Summary](./IMPLEMENTATION_SUMMARY.md)**: Current implementation status
 
 ## ✅ What This Is
 

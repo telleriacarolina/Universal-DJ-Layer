@@ -39,6 +39,17 @@ export interface StateChange {
   changeType: 'apply' | 'revert' | 'modify';
 }
 
+export interface ChangeDiff {
+  /** Path to the changed property */
+  path: string;
+  /** Type of change */
+  type: 'added' | 'removed' | 'modified';
+  /** Old value (if modified or removed) */
+  oldValue?: any;
+  /** New value (if added or modified) */
+  newValue?: any;
+}
+
 export interface StateManagerConfig {
   /** Maximum number of snapshots to keep */
   maxSnapshots?: number;

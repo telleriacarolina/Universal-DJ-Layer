@@ -125,6 +125,7 @@ export class AuditLog extends EventEmitter {
       fullEntry.changes = this.sanitizeSensitiveData(fullEntry.changes);
     }
 
+    // Add to in-memory array
     this.entries.push(fullEntry);
     this.entryIndex.set(fullEntry.entryId, fullEntry);
 
@@ -138,6 +139,18 @@ export class AuditLog extends EventEmitter {
       } catch (error) {
         // Ignore callback errors to prevent breaking audit logging
         console.error('Stream callback error:', error);
+      }
+    });
+
+    // Emit event for real-time monitoring
+    this.emit('audit-logged', fullEntry);
+    
+    // Notify stream callbacks
+    this.streamCallbacks.forEach(callback => {
+      try {
+        callback(fullEntry);
+      } catch (error) {
+        // Ignore callback errors to prevent disruption
       }
     });
 
@@ -173,10 +186,10 @@ export class AuditLog extends EventEmitter {
     if (options.result) {
       filtered = filtered.filter(e => e.result === options.result);
     }
-    if (options.startTime) {
+    if (options.startTime !== undefined) {
       filtered = filtered.filter(e => e.timestamp >= options.startTime!);
     }
-    if (options.endTime) {
+    if (options.endTime !== undefined) {
       filtered = filtered.filter(e => e.timestamp <= options.endTime!);
     }
 
@@ -185,6 +198,9 @@ export class AuditLog extends EventEmitter {
     filtered.sort((a, b) => 
       sortDir === 'asc' ? a.timestamp - b.timestamp : b.timestamp - a.timestamp
     );
+
+    // Emit query event
+    this.emit('audit-query', { options, resultCount: filtered.length });
 
     // Pagination
     const offset = options.offset ?? 0;
