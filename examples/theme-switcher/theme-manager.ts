@@ -108,6 +108,9 @@ export class ThemeManager {
    * Set primary color
    */
   async setPrimaryColor(color: string): Promise<void> {
+    if (!/^#[0-9A-F]{6}$/i.test(color)) {
+      throw new Error('Invalid color format. Use hex format: #RRGGBB');
+    }
     this.disc.setPrimaryColor(color, this.actorId);
   }
 
