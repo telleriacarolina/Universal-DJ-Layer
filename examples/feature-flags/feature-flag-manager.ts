@@ -194,7 +194,14 @@ export class FeatureFlagManager {
       };
     }
 
-    const enabledForUser = this.disc.isFeatureEnabled(featureName, userId);
+    let enabledForUser = false;
+    try {
+      enabledForUser = this.disc.isFeatureEnabled(featureName, userId);
+    } catch (error) {
+      // If disc throws error, default to disabled for safety
+      console.error(`Error checking feature ${featureName} for user ${userId}:`, error);
+    }
+
     const inWhitelist = feature.userWhitelist?.includes(userId) || false;
     const inBlacklist = feature.userBlacklist?.includes(userId) || false;
 

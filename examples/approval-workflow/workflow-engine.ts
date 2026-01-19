@@ -289,12 +289,22 @@ export class WorkflowEngine {
   }
 
   /**
-   * Get requests for a specific approver
+   * Get requests for a specific approver (excluding already approved)
    */
-  getRequestsForApprover(approverRole: Role): ApprovalRequest[] {
-    return this.getPendingRequests().filter(r =>
-      r.rule.allowedRoles.includes(approverRole)
-    );
+  getRequestsForApprover(approverRole: Role, approverId?: string): ApprovalRequest[] {
+    return this.getPendingRequests().filter(r => {
+      // Check if role is allowed
+      if (!r.rule.allowedRoles.includes(approverRole)) {
+        return false;
+      }
+
+      // If approverId provided, exclude requests already approved by this approver
+      if (approverId && r.approvals.some(a => a.approver === approverId)) {
+        return false;
+      }
+
+      return true;
+    });
   }
 
   /**

@@ -148,7 +148,7 @@ export class ThemeManager {
   /**
    * Get current theme
    */
-  getCurrentTheme(): any {
+  getCurrentTheme(): Record<string, any> {
     return this.disc.getConfig();
   }
 

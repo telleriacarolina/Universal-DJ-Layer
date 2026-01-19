@@ -327,8 +327,8 @@ export class ABTestingFramework {
           count: events.length,
           sum,
           mean,
-          min: Math.min(...values),
-          max: Math.max(...values),
+          min: values.length > 0 ? Math.min(...values) : 0,
+          max: values.length > 0 ? Math.max(...values) : 0,
           conversionRate: variantAssignments.length > 0 
             ? (events.length / variantAssignments.length) * 100 
             : 0
