@@ -10,9 +10,10 @@ export { DJEngine } from './core/dj-engine';
 export type {
   DJEngineConfig,
   ControlResult,
-  PreviewResult,
   ListControlsOptions,
 } from './core/dj-engine';
+// Note: PreviewResult is exported from the API layer instead of core
+// to provide a more developer-friendly interface with consistent types
 
 export { PolicyEvaluator } from './core/policy-evaluator';
 export type {
