@@ -97,7 +97,7 @@ export async function previewControl(
         actorId: actor.id,
         actorRole: actor.role.metadata.roleType,
         controlId: disc.metadata.id,
-        discType: disc.metadata.discType,
+        discType: disc.metadata.type,
         result: 'success',
         metadata: { safe },
       });

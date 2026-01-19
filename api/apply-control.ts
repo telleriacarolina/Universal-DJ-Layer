@@ -88,7 +88,7 @@ export async function applyControl(
         actorId: actor.id,
         actorRole: actor.role.metadata.roleType,
         controlId: result.controlId,
-        discType: disc.metadata.discType,
+        discType: disc.metadata.type,
         result: 'success',
         metadata: { changes: result.affectedSystems },
       });
@@ -118,7 +118,7 @@ export async function applyControl(
         actorId: actor.id,
         actorRole: actor.role.metadata.roleType,
         controlId: disc.metadata.id,
-        discType: disc.metadata.discType,
+        discType: disc.metadata.type,
         result: 'failure',
         metadata: { error: error instanceof Error ? error.message : String(error) },
       });

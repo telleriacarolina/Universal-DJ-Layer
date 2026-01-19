@@ -21,8 +21,8 @@ export function validateDisc(disc: Disc): void {
     throw new ValidationError('Disc must have a valid ID');
   }
 
-  if (!disc.metadata?.discType) {
-    throw new ValidationError('Disc must have a valid disc type');
+  if (!disc.metadata?.type) {
+    throw new ValidationError('Disc must have a valid type');
   }
 }
 
