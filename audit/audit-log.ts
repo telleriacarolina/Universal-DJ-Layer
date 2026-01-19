@@ -142,18 +142,6 @@ export class AuditLog extends EventEmitter {
       }
     });
 
-    // Emit event for real-time monitoring
-    this.emit('audit-logged', fullEntry);
-    
-    // Notify stream callbacks
-    this.streamCallbacks.forEach(callback => {
-      try {
-        callback(fullEntry);
-      } catch (error) {
-        // Ignore callback errors to prevent disruption
-      }
-    });
-
     return fullEntry.entryId;
   }
 
