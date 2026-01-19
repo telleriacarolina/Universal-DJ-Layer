@@ -41,6 +41,8 @@ export interface ControlResult {
   affectedSystems: string[];
   /** Status of the control operation */
   status: 'success' | 'failed' | 'partial';
+  // TODO: Add disc reference to enable proper policy evaluation during revert
+  // disc?: Disc;
 }
 
 export interface PreviewResult {
@@ -178,7 +180,7 @@ export class DJEngine {
     // 1. Check concurrent controls limit
     const maxConcurrent = this.config.maxConcurrentControls ?? 10;
     if (this.activeControls.size >= maxConcurrent) {
-      throw new Error(`Maximum concurrent controls limit (${maxConcurrent}) reached`);
+      throw new Error(`Maximum concurrent controls limit (${maxConcurrent}) reached. Revert existing controls or wait for them to complete.`);
     }
 
     // 2. Preview first if requested

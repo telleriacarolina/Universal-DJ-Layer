@@ -63,7 +63,7 @@ export class RBACManager {
     // Check if user already has this role
     const existingRole = roles.find(r => r.metadata.roleType === role.metadata.roleType);
     if (existingRole) {
-      throw new Error(`User ${userId} already has role ${role.metadata.roleType}`);
+      throw new Error(`User ${userId} already has role ${role.metadata.roleType}. Use revokeRole() first to replace existing role.`);
     }
 
     roles.push(role);

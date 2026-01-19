@@ -63,9 +63,16 @@ export class FeatureDisc implements Disc {
 
   /**
    * Apply feature flags to the system
+   * Simple placeholder implementation for testing.
+   * 
+   * Full implementation should:
+   * - Validate context
+   * - Apply each feature flag
+   * - Handle dependencies
+   * - Update feature registry
+   * - Return applied state
    */
   async apply(context: any): Promise<any> {
-    // Simple implementation for testing
     return {
       applied: true,
       features: this.config.features,
@@ -74,9 +81,15 @@ export class FeatureDisc implements Disc {
 
   /**
    * Revert feature flags to previous state
+   * Simple placeholder implementation for testing.
+   * 
+   * Full implementation should:
+   * - Retrieve previous state from context
+   * - Restore each feature flag
+   * - Update feature registry
+   * - Return reverted state
    */
   async revert(context: any): Promise<any> {
-    // Simple implementation for testing
     return {
       reverted: true,
       features: {},
@@ -85,9 +98,15 @@ export class FeatureDisc implements Disc {
 
   /**
    * Preview feature flag changes without applying
+   * Simple placeholder implementation for testing.
+   * 
+   * Full implementation should:
+   * - Calculate what would change
+   * - Identify affected components
+   * - Estimate impact
+   * - Return preview data
    */
   async preview(context: any): Promise<any> {
-    // Simple implementation for testing
     return {
       changes: this.config.features,
       affectedFeatures: Object.keys(this.config.features),
@@ -96,13 +115,19 @@ export class FeatureDisc implements Disc {
 
   /**
    * Validate feature disc configuration
+   * Simple placeholder implementation for testing.
+   * 
+   * Full implementation should:
+   * - Check all features are valid
+   * - Validate dependencies exist
+   * - Check for circular dependencies
+   * - Validate targeting rules
+   * - Return validation result
    */
   async validate(): Promise<boolean> {
-    // Check all features are valid
     if (!this.config.features || typeof this.config.features !== 'object') {
       return false;
     }
-    // Check for circular dependencies
     return true;
   }
 

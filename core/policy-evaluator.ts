@@ -84,11 +84,11 @@ export class PolicyEvaluator {
    */
   registerPolicy(policy: Policy): void {
     if (!policy.metadata || !policy.metadata.policyId) {
-      throw new Error('Policy must have valid metadata with policyId');
+      throw new Error('Policy must have valid metadata with policyId, policyType, createdAt, createdBy, and priority fields');
     }
 
     if (!policy.validate()) {
-      throw new Error(`Policy ${policy.metadata.policyId} failed validation`);
+      throw new Error(`Policy ${policy.metadata.policyId} failed validation. Check policy configuration.`);
     }
 
     this.policies.set(policy.metadata.policyId, policy);
@@ -265,7 +265,8 @@ export class PolicyEvaluator {
     this.creatorLocks.add(resourceId);
     
     if (this.auditLog) {
-      this.auditLog.log({
+      // Use void to explicitly ignore the promise
+      void this.auditLog.log({
         action: 'policy-change',
         actorId: creatorId,
         actorRole: 'creator',
