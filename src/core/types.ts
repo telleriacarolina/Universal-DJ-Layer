@@ -5,7 +5,7 @@ export enum Role {
   VIEWER = 'viewer',
   EXPERIMENTER = 'experimenter',
   ADMIN = 'admin',
-  OWNER = 'owner'
+  OWNER = 'owner',
 }
 
 /**
@@ -16,7 +16,7 @@ export enum Permission {
   WRITE = 'write',
   EXECUTE = 'execute',
   DELETE = 'delete',
-  CONFIGURE = 'configure'
+  CONFIGURE = 'configure',
 }
 
 /**

@@ -5,7 +5,7 @@ import {
   User,
   ThemeDisc,
   FeatureFlagDisc,
-  ComplianceRule
+  ComplianceRule,
 } from '../index';
 
 /**
@@ -29,9 +29,9 @@ const dataPrivacyRule: ComplianceRule = {
     return {
       passed: violations.length === 0,
       violations,
-      warnings
+      warnings,
     };
-  }
+  },
 };
 
 // Initialize the DJ Control Layer
@@ -42,7 +42,9 @@ const djLayer = new DJControlLayer({
   complianceRules: [dataPrivacyRule],
   hooks: {
     onBeforeChange: async (context) => {
-      console.log(`Change requested by ${context.user.name}: ${context.action} on ${context.discId}`);
+      console.log(
+        `Change requested by ${context.user.name}: ${context.action} on ${context.discId}`
+      );
       return true; // Allow the change
     },
     onAfterChange: async (context) => {
@@ -50,33 +52,33 @@ const djLayer = new DJControlLayer({
     },
     onAuditLog: async (entry) => {
       console.log(`Audit log: ${entry.action} by ${entry.userName} at ${entry.timestamp}`);
-    }
-  }
+    },
+  },
 });
 
 // Create example users
 const ownerUser: User = {
   id: 'user-001',
   name: 'Alice Owner',
-  role: Role.OWNER
+  role: Role.OWNER,
 };
 
 const adminUser: User = {
   id: 'user-002',
   name: 'Bob Admin',
-  role: Role.ADMIN
+  role: Role.ADMIN,
 };
 
 const experimenterUser: User = {
   id: 'user-003',
   name: 'Charlie Experimenter',
-  role: Role.EXPERIMENTER
+  role: Role.EXPERIMENTER,
 };
 
 const viewerUser: User = {
   id: 'user-004',
   name: 'Diana Viewer',
-  role: Role.VIEWER
+  role: Role.VIEWER,
 };
 
 // Example usage function
@@ -105,20 +107,24 @@ async function demonstrateUsage() {
 
   // 4. Update theme configuration
   console.log('4. Updating theme configuration...');
-  await djLayer.updateDiscConfig('theme-disc', {
-    primaryColor: '#ff6347',
-    darkMode: true
-  }, experimenterUser);
+  await djLayer.updateDiscConfig(
+    'theme-disc',
+    {
+      primaryColor: '#ff6347',
+      darkMode: true,
+    },
+    experimenterUser
+  );
   console.log('✓ Theme updated\n');
 
   // 5. Set feature flags
   console.log('5. Setting feature flags...');
   const ffDisc = djLayer.getDisc('feature-flag-disc') as FeatureFlagDisc;
   ffDisc.setFeatureFlag('new-dashboard', true, experimenterUser.id, {
-    rolloutPercentage: 50
+    rolloutPercentage: 50,
   });
   ffDisc.setFeatureFlag('beta-feature', true, experimenterUser.id, {
-    userWhitelist: ['user-003']
+    userWhitelist: ['user-003'],
   });
   console.log('✓ Feature flags set\n');
 
@@ -127,9 +133,13 @@ async function demonstrateUsage() {
   const themeResult = await djLayer.executeDisc('theme-disc', {}, experimenterUser);
   console.log('Theme result:', themeResult);
 
-  const featureResult = await djLayer.executeDisc('feature-flag-disc', {
-    featureName: 'new-dashboard'
-  }, experimenterUser);
+  const featureResult = await djLayer.executeDisc(
+    'feature-flag-disc',
+    {
+      featureName: 'new-dashboard',
+    },
+    experimenterUser
+  );
   console.log('Feature flag result:', featureResult);
   console.log('');
 
@@ -138,8 +148,10 @@ async function demonstrateUsage() {
   const logs = djLayer.getAuditLogs(adminUser);
   console.log(`Total audit logs: ${logs.length}`);
   console.log('Recent logs:');
-  logs.slice(-3).forEach(log => {
-    console.log(`  - ${log.action} on ${log.discName} by ${log.userName} at ${log.timestamp.toISOString()}`);
+  logs.slice(-3).forEach((log) => {
+    console.log(
+      `  - ${log.action} on ${log.discName} by ${log.userName} at ${log.timestamp.toISOString()}`
+    );
   });
   console.log('');
 
