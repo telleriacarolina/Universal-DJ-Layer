@@ -48,7 +48,7 @@
   },
   "sideEffects": false,
   "scripts": {
-    "clean": "rimraf dist",
+    "clean": "npx rimraf dist",
     "build": "npm run clean && npm run build:cjs && npm run build:esm && npm run build:types",
     "build:cjs": "tsc -p tsconfig.json",
     "build:esm": "tsc -p tsconfig.esm.json && echo '{\"type\":\"module\"}' > dist/esm/package.json",
@@ -56,8 +56,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "size": "npm run build && size-limit",
-    "analyze": "npm run build && source-map-explorer dist/**/*.js",
+    "size": "npm run build && npx size-limit",
+    "analyze": "npm run build && npx source-map-explorer dist/**/*.js",
     "prepublishOnly": "node scripts/prepublish-check.js && npm run build"
   },
   "devDependencies": {
