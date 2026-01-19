@@ -1,5 +1,10 @@
 # Universal DJ Control Layer
 
+[![npm version](https://badge.fury.io/js/universal-dj-layer.svg)](https://www.npmjs.com/package/universal-dj-layer)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Build Status](https://github.com/telleriacarolina/Universal-DJ-Layer/workflows/CI/badge.svg)](https://github.com/telleriacarolina/Universal-DJ-Layer/actions)
+[![Bundle Size](https://img.shields.io/bundlephobia/minzip/universal-dj-layer)](https://bundlephobia.com/package/universal-dj-layer)
+
 > A universal, pluggable control layer enabling safe collaboration, real-time experimentation, and role-based runtime tuning in any application.
 
 ## 🎯 Overview
