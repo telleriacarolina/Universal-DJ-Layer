@@ -44,7 +44,8 @@ export type {
 export { PermissionDisc } from './discs/permission-disc';
 export type {
   PermissionConfig,
-  PermissionRule,
+  PermissionGrant,
+  AuditEntry,
 } from './discs/permission-disc';
 
 export { FlowDisc } from './discs/flow-disc';
