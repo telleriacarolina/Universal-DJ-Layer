@@ -33,42 +33,36 @@ export type {
   StateManagerConfig,
 } from './core/state-manager';
 
-// Disc exports
-export { FeatureDisc } from './discs/feature-disc';
+// Disc exports - All 5 core disc types
+export {
+  FeatureDisc,
+  PermissionDisc,
+  UIDisc,
+  FlowDisc,
+  BehaviorDisc,
+} from './discs';
+
 export type {
   Disc,
   DiscMetadata,
   FeatureConfig,
-} from './discs/feature-disc';
-
-export { PermissionDisc } from './discs/permission-disc';
-export type {
+  FeatureState,
   PermissionConfig,
+  PermissionRule,
   PermissionGrant,
-  AuditEntry,
-} from './discs/permission-disc';
-
-export { FlowDisc } from './discs/flow-disc';
-export type {
-  FlowConfig,
-  FlowDefinition,
-  FlowStep,
-} from './discs/flow-disc';
-
-export { UIDisc } from './discs/ui-disc';
-export type {
   UIConfig,
   UIComponent,
   UILayout,
   UITheme,
-} from './discs/ui-disc';
-
-export { BehaviorDisc } from './discs/behavior-disc';
-export type {
+  FlowConfig,
+  FlowDefinition,
+  FlowStep,
+  WorkflowInstance,
   BehaviorConfig,
   BehaviorRule,
   BehaviorStrategy,
-} from './discs/behavior-disc';
+  FunctionWrapper,
+} from './discs';
 
 // Role exports
 export { CreatorRole } from './roles/creator';
