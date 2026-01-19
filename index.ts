@@ -48,7 +48,6 @@ export type {
   FeatureConfig,
   FeatureState,
   PermissionConfig,
-  PermissionRule,
   PermissionGrant,
   UIConfig,
   UIComponent,

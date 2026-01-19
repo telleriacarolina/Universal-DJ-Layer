@@ -18,7 +18,6 @@ export {
 export {
   PermissionDisc,
   type PermissionConfig,
-  type PermissionRule,
   type PermissionGrant,
   type AuditEntry,
 } from './permission-disc';
