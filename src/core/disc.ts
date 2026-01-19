@@ -15,7 +15,7 @@ export abstract class Disc {
       config: {},
       data: null,
       lastModified: new Date(),
-      lastModifiedBy: ''
+      lastModifiedBy: '',
     };
   }
 
@@ -41,7 +41,7 @@ export abstract class Disc {
       ...this.state,
       ...state,
       lastModified: new Date(),
-      lastModifiedBy: userId
+      lastModifiedBy: userId,
     };
   }
 
@@ -110,10 +110,14 @@ export abstract class Disc {
    * Export disc state for backup/migration
    */
   exportState(): string {
-    return JSON.stringify({
-      metadata: this.metadata,
-      state: this.state
-    }, null, 2);
+    return JSON.stringify(
+      {
+        metadata: this.metadata,
+        state: this.state,
+      },
+      null,
+      2
+    );
   }
 
   /**
@@ -125,7 +129,7 @@ export abstract class Disc {
       if (imported.state) {
         this.state = {
           ...imported.state,
-          lastModified: new Date(imported.state.lastModified)
+          lastModified: new Date(imported.state.lastModified),
         };
       }
     } catch (error) {

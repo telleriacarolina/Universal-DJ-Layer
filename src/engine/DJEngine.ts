@@ -18,19 +18,19 @@ export class DJEngine {
     this.eventLog = [];
     this.currentActor = actor;
     this.currentRole = role;
-    
+
     // Initialize role hierarchy (higher number = more authority)
     this.roleHierarchy = new Map([
       [Role.Creator, 5],
       [Role.Admin, 4],
       [Role.Moderator, 3],
       [Role.User, 2],
-      [Role.AIAgent, 1]
+      [Role.AIAgent, 1],
     ]);
 
     this.log('EngineInitialized', undefined, {
       actor,
-      role
+      role,
     });
   }
 
@@ -59,11 +59,11 @@ export class DJEngine {
 
     // Register the disc
     this.registeredDiscs.set(disc.name, disc);
-    
+
     this.log('DiscRegistered', disc.name, {
       scope: disc.scope,
       allowedRoles: disc.allowedRoles,
-      isTemporary: disc.isTemporary
+      isTemporary: disc.isTemporary,
     });
   }
 
@@ -93,9 +93,9 @@ export class DJEngine {
 
     // Activate the disc
     this.activeDiscs.add(name);
-    
+
     this.log('DiscActivated', name, {
-      isTemporary: disc.isTemporary
+      isTemporary: disc.isTemporary,
     });
 
     // Execute the disc if it has an execute function
@@ -130,9 +130,9 @@ export class DJEngine {
 
     // Deactivate the disc
     this.activeDiscs.delete(name);
-    
+
     this.log('DiscDeactivated', name, {
-      isTemporary: disc.isTemporary
+      isTemporary: disc.isTemporary,
     });
   }
 
@@ -220,11 +220,11 @@ export class DJEngine {
       discName,
       actor: this.currentActor,
       role: this.currentRole,
-      details
+      details,
     };
 
     this.eventLog.push(entry);
-    
+
     // Console logging for observability
     console.log(
       `[${entry.timestamp.toISOString()}] ${entry.event}${

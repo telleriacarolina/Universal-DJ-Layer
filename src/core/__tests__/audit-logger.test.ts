@@ -16,7 +16,7 @@ describe('AuditLogger', () => {
         action: 'test-action',
         discId: 'disc-1',
         discName: 'Test Disc',
-        changeDescription: 'Test change'
+        changeDescription: 'Test change',
       });
 
       const logs = auditLogger.getAllLogs();
@@ -26,7 +26,7 @@ describe('AuditLogger', () => {
 
     it('should maintain max log size', () => {
       const smallLogger = new AuditLogger(5);
-      
+
       for (let i = 0; i < 10; i++) {
         smallLogger.log({
           userId: `user-${i}`,
@@ -34,7 +34,7 @@ describe('AuditLogger', () => {
           action: 'action',
           discId: 'disc-1',
           discName: 'Disc',
-          changeDescription: `Change ${i}`
+          changeDescription: `Change ${i}`,
         });
       }
 
@@ -50,7 +50,7 @@ describe('AuditLogger', () => {
         action: 'action1',
         discId: 'disc-1',
         discName: 'Disc 1',
-        changeDescription: 'Change 1'
+        changeDescription: 'Change 1',
       });
 
       auditLogger.log({
@@ -59,7 +59,7 @@ describe('AuditLogger', () => {
         action: 'action2',
         discId: 'disc-2',
         discName: 'Disc 2',
-        changeDescription: 'Change 2'
+        changeDescription: 'Change 2',
       });
 
       const user1Logs = auditLogger.getLogsByUser('user-1');
@@ -76,7 +76,7 @@ describe('AuditLogger', () => {
         action: 'action1',
         discId: 'disc-1',
         discName: 'Disc 1',
-        changeDescription: 'Change 1'
+        changeDescription: 'Change 1',
       });
 
       auditLogger.log({
@@ -85,7 +85,7 @@ describe('AuditLogger', () => {
         action: 'action2',
         discId: 'disc-2',
         discName: 'Disc 2',
-        changeDescription: 'Change 2'
+        changeDescription: 'Change 2',
       });
 
       const disc1Logs = auditLogger.getLogsByDisc('disc-1');
@@ -102,7 +102,7 @@ describe('AuditLogger', () => {
         action: 'action1',
         discId: 'disc-1',
         discName: 'Disc 1',
-        changeDescription: 'Change 1'
+        changeDescription: 'Change 1',
       });
 
       const exported = auditLogger.export();

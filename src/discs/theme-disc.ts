@@ -13,7 +13,7 @@ export class ThemeDisc extends Disc {
       description: 'Manages application theme and visual settings',
       author: 'DJ Control Layer',
       requiredRole: Role.EXPERIMENTER,
-      requiredPermissions: [Permission.READ, Permission.WRITE]
+      requiredPermissions: [Permission.READ, Permission.WRITE],
     };
 
     super(metadata);
@@ -24,7 +24,7 @@ export class ThemeDisc extends Disc {
       secondaryColor: '#6c757d',
       darkMode: false,
       fontSize: 'medium',
-      fontFamily: 'Arial, sans-serif'
+      fontFamily: 'Arial, sans-serif',
     };
   }
 
@@ -41,12 +41,12 @@ export class ThemeDisc extends Disc {
     const theme = {
       ...this.state.config,
       appliedAt: new Date(),
-      appliedBy: context.userId
+      appliedBy: context.userId,
     };
 
     return {
       success: true,
-      theme
+      theme,
     };
   }
 

@@ -9,7 +9,7 @@ import {
   Role,
   Permission,
   ChangeContext,
-  IntegrationHooks
+  IntegrationHooks,
 } from './types';
 
 /**
@@ -33,7 +33,7 @@ export class DJControlLayer {
       enableUserIsolation: true,
       complianceRules: [],
       hooks: {},
-      ...config
+      ...config,
     };
 
     this.rbacManager = new RBACManager();
@@ -44,7 +44,7 @@ export class DJControlLayer {
 
     // Initialize compliance rules
     if (this.config.complianceRules) {
-      this.config.complianceRules.forEach(rule => {
+      this.config.complianceRules.forEach((rule) => {
         this.complianceValidator.addRule(rule);
       });
     }
@@ -65,7 +65,7 @@ export class DJControlLayer {
     const complianceResult = await this.complianceValidator.validateAll({
       action: 'addDisc',
       disc: metadata,
-      user
+      user,
     });
 
     if (!complianceResult.passed) {
@@ -78,7 +78,7 @@ export class DJControlLayer {
         user,
         discId: metadata.id,
         action: 'addDisc',
-        data: metadata
+        data: metadata,
       });
 
       if (!allowed) {
@@ -104,7 +104,7 @@ export class DJControlLayer {
         discId: metadata.id,
         discName: metadata.name,
         changeDescription: `Added disc: ${metadata.name}`,
-        newState: disc.getState()
+        newState: disc.getState(),
       });
 
       if (this.hooks.onAuditLog) {
@@ -119,7 +119,7 @@ export class DJControlLayer {
         user,
         discId: metadata.id,
         action: 'addDisc',
-        data: metadata
+        data: metadata,
       });
     }
   }
@@ -146,7 +146,7 @@ export class DJControlLayer {
         user,
         discId,
         action: 'removeDisc',
-        data: { discId }
+        data: { discId },
       });
 
       if (!allowed) {
@@ -171,7 +171,7 @@ export class DJControlLayer {
         discId,
         discName: metadata.name,
         changeDescription: `Removed disc: ${metadata.name}`,
-        previousState
+        previousState,
       });
 
       if (this.hooks.onAuditLog) {
@@ -186,7 +186,7 @@ export class DJControlLayer {
         user,
         discId,
         action: 'removeDisc',
-        data: { discId }
+        data: { discId },
       });
     }
   }
@@ -217,7 +217,9 @@ export class DJControlLayer {
     const metadata = disc.getMetadata();
 
     // Check permissions
-    if (!this.rbacManager.canPerformAction(user, metadata.requiredRole, metadata.requiredPermissions)) {
+    if (
+      !this.rbacManager.canPerformAction(user, metadata.requiredRole, metadata.requiredPermissions)
+    ) {
       throw new Error('Insufficient permissions to enable disc');
     }
 
@@ -227,7 +229,7 @@ export class DJControlLayer {
         user,
         discId,
         action: 'enableDisc',
-        data: { enabled: true }
+        data: { enabled: true },
       });
 
       if (!allowed) {
@@ -246,7 +248,7 @@ export class DJControlLayer {
         action: 'enableDisc',
         discId,
         discName: metadata.name,
-        changeDescription: `Enabled disc: ${metadata.name}`
+        changeDescription: `Enabled disc: ${metadata.name}`,
       });
 
       if (this.hooks.onAuditLog) {
@@ -261,7 +263,7 @@ export class DJControlLayer {
         user,
         discId,
         action: 'enableDisc',
-        data: { enabled: true }
+        data: { enabled: true },
       });
     }
   }
@@ -278,7 +280,9 @@ export class DJControlLayer {
     const metadata = disc.getMetadata();
 
     // Check permissions
-    if (!this.rbacManager.canPerformAction(user, metadata.requiredRole, metadata.requiredPermissions)) {
+    if (
+      !this.rbacManager.canPerformAction(user, metadata.requiredRole, metadata.requiredPermissions)
+    ) {
       throw new Error('Insufficient permissions to disable disc');
     }
 
@@ -288,7 +292,7 @@ export class DJControlLayer {
         user,
         discId,
         action: 'disableDisc',
-        data: { enabled: false }
+        data: { enabled: false },
       });
 
       if (!allowed) {
@@ -307,7 +311,7 @@ export class DJControlLayer {
         action: 'disableDisc',
         discId,
         discName: metadata.name,
-        changeDescription: `Disabled disc: ${metadata.name}`
+        changeDescription: `Disabled disc: ${metadata.name}`,
       });
 
       if (this.hooks.onAuditLog) {
@@ -322,7 +326,7 @@ export class DJControlLayer {
         user,
         discId,
         action: 'disableDisc',
-        data: { enabled: false }
+        data: { enabled: false },
       });
     }
   }
@@ -353,7 +357,7 @@ export class DJControlLayer {
       executionContext = {
         ...context,
         userId: user.id,
-        userContext: this.userContexts.get(user.id) || {}
+        userContext: this.userContexts.get(user.id) || {},
       };
     }
 
@@ -374,7 +378,7 @@ export class DJControlLayer {
         discId,
         discName: metadata.name,
         changeDescription: `Executed disc: ${metadata.name}`,
-        metadata: { contextKeys: Object.keys(context) }
+        metadata: { contextKeys: Object.keys(context) },
       });
 
       if (this.hooks.onAuditLog) {
@@ -408,7 +412,7 @@ export class DJControlLayer {
         user,
         discId,
         action: 'updateDiscConfig',
-        data: config
+        data: config,
       });
 
       if (!allowed) {
@@ -430,7 +434,7 @@ export class DJControlLayer {
         discName: metadata.name,
         changeDescription: `Updated configuration for disc: ${metadata.name}`,
         previousState: previousConfig,
-        newState: disc.getConfig()
+        newState: disc.getConfig(),
       });
 
       if (this.hooks.onAuditLog) {
@@ -445,7 +449,7 @@ export class DJControlLayer {
         user,
         discId,
         action: 'updateDiscConfig',
-        data: config
+        data: config,
       });
     }
   }
@@ -470,7 +474,7 @@ export class DJControlLayer {
         discId: 'system',
         discName: 'System',
         changeDescription: `Created snapshot: ${snapshotId}`,
-        metadata: { snapshotId, description }
+        metadata: { snapshotId, description },
       });
 
       if (this.hooks.onAuditLog) {
@@ -522,7 +526,7 @@ export class DJControlLayer {
         discId: 'system',
         discName: 'System',
         changeDescription: `Rolled back to snapshot: ${snapshotId}`,
-        metadata: { snapshotId }
+        metadata: { snapshotId },
       });
 
       if (this.hooks.onAuditLog) {
@@ -588,14 +592,18 @@ export class DJControlLayer {
     for (const [id, disc] of this.discs.entries()) {
       discStates[id] = {
         metadata: disc.getMetadata(),
-        state: disc.getState()
+        state: disc.getState(),
       };
     }
 
-    return JSON.stringify({
-      discs: discStates,
-      snapshots: this.stateManager.getAllSnapshots(),
-      auditLogs: this.auditLogger.getAllLogs()
-    }, null, 2);
+    return JSON.stringify(
+      {
+        discs: discStates,
+        snapshots: this.stateManager.getAllSnapshots(),
+        auditLogs: this.auditLogger.getAllLogs(),
+      },
+      null,
+      2
+    );
   }
 }

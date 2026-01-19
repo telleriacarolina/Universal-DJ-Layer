@@ -7,14 +7,14 @@ describe('DJEngine', () => {
 
   beforeEach(() => {
     engine = new DJEngine('TestUser', Role.Creator);
-    
+
     sampleDisc = {
       name: 'TestDisc',
       description: 'A test disc',
       scope: Scope.Local,
       allowedRoles: [Role.Creator, Role.Admin],
       isTemporary: true,
-      execute: jest.fn()
+      execute: jest.fn(),
     };
   });
 
@@ -40,7 +40,7 @@ describe('DJEngine', () => {
   describe('Disc Registration', () => {
     it('should register a valid disc', () => {
       engine.registerDisc(sampleDisc);
-      
+
       expect(engine.getRegisteredDiscs()).toHaveLength(1);
       expect(engine.getDisc('TestDisc')).toBeDefined();
       expect(engine.getDisc('TestDisc')?.name).toBe('TestDisc');
@@ -48,29 +48,29 @@ describe('DJEngine', () => {
 
     it('should log disc registration event', () => {
       engine.registerDisc(sampleDisc);
-      
+
       const log = engine.getEventLog();
-      const registrationEvent = log.find(e => e.event === 'DiscRegistered');
-      
+      const registrationEvent = log.find((e) => e.event === 'DiscRegistered');
+
       expect(registrationEvent).toBeDefined();
       expect(registrationEvent?.discName).toBe('TestDisc');
     });
 
     it('should throw error for disc without name', () => {
       const invalidDisc = { ...sampleDisc, name: '' };
-      
+
       expect(() => engine.registerDisc(invalidDisc)).toThrow('Disc name is required');
     });
 
     it('should throw error for disc without scope', () => {
       const invalidDisc = { ...sampleDisc, scope: undefined as any };
-      
+
       expect(() => engine.registerDisc(invalidDisc)).toThrow('Disc scope is required');
     });
 
     it('should throw error for disc without allowed roles', () => {
       const invalidDisc = { ...sampleDisc, allowedRoles: [] };
-      
+
       expect(() => engine.registerDisc(invalidDisc)).toThrow(
         'Disc must have at least one allowed role'
       );
@@ -78,15 +78,13 @@ describe('DJEngine', () => {
 
     it('should throw error for disc without isTemporary flag', () => {
       const invalidDisc = { ...sampleDisc, isTemporary: undefined as any };
-      
-      expect(() => engine.registerDisc(invalidDisc)).toThrow(
-        'Disc isTemporary flag is required'
-      );
+
+      expect(() => engine.registerDisc(invalidDisc)).toThrow('Disc isTemporary flag is required');
     });
 
     it('should throw error when registering duplicate disc', () => {
       engine.registerDisc(sampleDisc);
-      
+
       expect(() => engine.registerDisc(sampleDisc)).toThrow(
         'Disc "TestDisc" is already registered'
       );
@@ -100,24 +98,24 @@ describe('DJEngine', () => {
 
     it('should activate a registered disc', () => {
       engine.activateDisc('TestDisc');
-      
+
       expect(engine.isDiscActive('TestDisc')).toBe(true);
       expect(engine.getActiveDiscs()).toContain('TestDisc');
     });
 
     it('should log disc activation event', () => {
       engine.activateDisc('TestDisc');
-      
+
       const log = engine.getEventLog();
-      const activationEvent = log.find(e => e.event === 'DiscActivated');
-      
+      const activationEvent = log.find((e) => e.event === 'DiscActivated');
+
       expect(activationEvent).toBeDefined();
       expect(activationEvent?.discName).toBe('TestDisc');
     });
 
     it('should execute disc function on activation', () => {
       engine.activateDisc('TestDisc');
-      
+
       expect(sampleDisc.execute).toHaveBeenCalled();
     });
 
@@ -129,15 +127,13 @@ describe('DJEngine', () => {
 
     it('should throw error when activating already active disc', () => {
       engine.activateDisc('TestDisc');
-      
-      expect(() => engine.activateDisc('TestDisc')).toThrow(
-        'Disc "TestDisc" is already active'
-      );
+
+      expect(() => engine.activateDisc('TestDisc')).toThrow('Disc "TestDisc" is already active');
     });
 
     it('should throw error when role lacks permission', () => {
       engine.setActor('RegularUser', Role.User);
-      
+
       expect(() => engine.activateDisc('TestDisc')).toThrow(
         'Role "User" does not have permission to activate disc "TestDisc"'
       );
@@ -152,17 +148,17 @@ describe('DJEngine', () => {
 
     it('should deactivate an active disc', () => {
       engine.deactivateDisc('TestDisc');
-      
+
       expect(engine.isDiscActive('TestDisc')).toBe(false);
       expect(engine.getActiveDiscs()).not.toContain('TestDisc');
     });
 
     it('should log disc deactivation event', () => {
       engine.deactivateDisc('TestDisc');
-      
+
       const log = engine.getEventLog();
-      const deactivationEvent = log.find(e => e.event === 'DiscDeactivated');
-      
+      const deactivationEvent = log.find((e) => e.event === 'DiscDeactivated');
+
       expect(deactivationEvent).toBeDefined();
       expect(deactivationEvent?.discName).toBe('TestDisc');
     });
@@ -175,15 +171,13 @@ describe('DJEngine', () => {
 
     it('should throw error when deactivating inactive disc', () => {
       engine.deactivateDisc('TestDisc');
-      
-      expect(() => engine.deactivateDisc('TestDisc')).toThrow(
-        'Disc "TestDisc" is not active'
-      );
+
+      expect(() => engine.deactivateDisc('TestDisc')).toThrow('Disc "TestDisc" is not active');
     });
 
     it('should throw error when role lacks permission', () => {
       engine.setActor('RegularUser', Role.User);
-      
+
       expect(() => engine.deactivateDisc('TestDisc')).toThrow(
         'Role "User" does not have permission to deactivate disc "TestDisc"'
       );
@@ -196,7 +190,7 @@ describe('DJEngine', () => {
         name: 'CreatorDisc',
         scope: Scope.Global,
         allowedRoles: [Role.Creator],
-        isTemporary: false
+        isTemporary: false,
       };
 
       expect(engine.canExecute(Role.Creator, disc)).toBe(true);
@@ -207,7 +201,7 @@ describe('DJEngine', () => {
         name: 'AdminDisc',
         scope: Scope.Global,
         allowedRoles: [Role.Admin],
-        isTemporary: false
+        isTemporary: false,
       };
 
       expect(engine.canExecute(Role.Admin, disc)).toBe(true);
@@ -218,7 +212,7 @@ describe('DJEngine', () => {
         name: 'AdminDisc',
         scope: Scope.Global,
         allowedRoles: [Role.Admin],
-        isTemporary: false
+        isTemporary: false,
       };
 
       expect(engine.canExecute(Role.User, disc)).toBe(false);
@@ -229,7 +223,7 @@ describe('DJEngine', () => {
         name: 'MultiRoleDisc',
         scope: Scope.Local,
         allowedRoles: [Role.Creator, Role.Admin, Role.Moderator],
-        isTemporary: true
+        isTemporary: true,
       };
 
       expect(engine.canExecute(Role.Creator, disc)).toBe(true);
@@ -242,10 +236,10 @@ describe('DJEngine', () => {
   describe('Actor Management', () => {
     it('should allow changing actor', () => {
       engine.setActor('NewUser', Role.Admin);
-      
+
       const log = engine.getEventLog();
-      const actorChangeEvent = log.find(e => e.event === 'ActorChanged');
-      
+      const actorChangeEvent = log.find((e) => e.event === 'ActorChanged');
+
       expect(actorChangeEvent).toBeDefined();
       expect(actorChangeEvent?.details?.actor).toBe('NewUser');
       expect(actorChangeEvent?.details?.role).toBe(Role.Admin);
@@ -254,10 +248,10 @@ describe('DJEngine', () => {
     it('should use new actor for subsequent operations', () => {
       engine.setActor('Admin1', Role.Admin);
       engine.registerDisc(sampleDisc);
-      
+
       const log = engine.getEventLog();
-      const registrationEvent = log.find(e => e.event === 'DiscRegistered');
-      
+      const registrationEvent = log.find((e) => e.event === 'DiscRegistered');
+
       expect(registrationEvent?.actor).toBe('Admin1');
     });
   });
@@ -266,11 +260,11 @@ describe('DJEngine', () => {
     it('should maintain event log with timestamps', () => {
       engine.registerDisc(sampleDisc);
       engine.activateDisc('TestDisc');
-      
+
       const log = engine.getEventLog();
-      
+
       expect(log.length).toBeGreaterThan(2);
-      log.forEach(entry => {
+      log.forEach((entry) => {
         expect(entry.timestamp).toBeInstanceOf(Date);
         expect(entry.actor).toBeDefined();
         expect(entry.role).toBeDefined();
@@ -280,10 +274,10 @@ describe('DJEngine', () => {
     it('should include disc name in relevant events', () => {
       engine.registerDisc(sampleDisc);
       engine.activateDisc('TestDisc');
-      
+
       const log = engine.getEventLog();
-      const discEvents = log.filter(e => e.discName === 'TestDisc');
-      
+      const discEvents = log.filter((e) => e.discName === 'TestDisc');
+
       expect(discEvents.length).toBeGreaterThan(0);
     });
   });
@@ -294,12 +288,12 @@ describe('DJEngine', () => {
         name: 'TempDisc',
         scope: Scope.Local,
         allowedRoles: [Role.Creator],
-        isTemporary: true
+        isTemporary: true,
       };
 
       engine.registerDisc(tempDisc);
       const registered = engine.getDisc('TempDisc');
-      
+
       expect(registered?.isTemporary).toBe(true);
     });
 
@@ -308,12 +302,12 @@ describe('DJEngine', () => {
         name: 'PermDisc',
         scope: Scope.Global,
         allowedRoles: [Role.Creator],
-        isTemporary: false
+        isTemporary: false,
       };
 
       engine.registerDisc(permDisc);
       const registered = engine.getDisc('PermDisc');
-      
+
       expect(registered?.isTemporary).toBe(false);
     });
   });
