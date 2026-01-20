@@ -6,6 +6,7 @@
  */
 
 import { EventEmitter } from 'events';
+import { Cache } from '../core/cache';
 
 export interface AuditEntry {
   /** Unique identifier for this audit entry */
@@ -70,6 +71,10 @@ export interface AuditLogConfig {
   storagePath?: string;
   /** Custom list of sensitive fields to redact (optional) */
   sensitiveFields?: string[];
+  /** Enable caching for queries */
+  enableCache?: boolean;
+  /** Cache TTL in milliseconds */
+  cacheTTL?: number;
 }
 
 export class AuditLog extends EventEmitter {
@@ -78,6 +83,7 @@ export class AuditLog extends EventEmitter {
   private entryIndex: Map<string, AuditEntry> = new Map();
   private streamCallbacks: Set<(entry: AuditEntry) => void> = new Set();
   private sensitiveFieldsLowercase: string[];
+  private queryCache: Cache<AuditEntry[]>;
 
   constructor(config: AuditLogConfig = {}) {
     super();
@@ -88,12 +94,20 @@ export class AuditLog extends EventEmitter {
       includeSensitiveData: config.includeSensitiveData ?? false,
       storagePath: config.storagePath,
       sensitiveFields: config.sensitiveFields,
+      enableCache: config.enableCache ?? true,
+      cacheTTL: config.cacheTTL ?? 60000, // 1 minute default for audit logs
     };
 
     // Pre-compute lowercase sensitive fields for performance
     const defaultSensitiveFields = ['password', 'token', 'secret', 'apiKey', 'privateKey', 'ssn', 'creditCard'];
     const fields = this.config.sensitiveFields || defaultSensitiveFields;
     this.sensitiveFieldsLowercase = fields.map(f => f.toLowerCase());
+
+    // Initialize cache
+    this.queryCache = new Cache<AuditEntry[]>({
+      defaultTTL: this.config.cacheTTL,
+      enableStats: true,
+    });
   }
 
   /**
@@ -129,6 +143,11 @@ export class AuditLog extends EventEmitter {
     this.entries.push(fullEntry);
     this.entryIndex.set(fullEntry.entryId, fullEntry);
 
+    // Invalidate cache on new entry
+    if (this.config.enableCache) {
+      this.queryCache.clear();
+    }
+
     // Emit event for real-time monitoring
     this.emit('audit-logged', fullEntry);
 
@@ -139,18 +158,6 @@ export class AuditLog extends EventEmitter {
       } catch (error) {
         // Ignore callback errors to prevent breaking audit logging
         console.error('Stream callback error:', error);
-      }
-    });
-
-    // Emit event for real-time monitoring
-    this.emit('audit-logged', fullEntry);
-    
-    // Notify stream callbacks
-    this.streamCallbacks.forEach(callback => {
-      try {
-        callback(fullEntry);
-      } catch (error) {
-        // Ignore callback errors to prevent disruption
       }
     });
 
@@ -170,6 +177,19 @@ export class AuditLog extends EventEmitter {
    */
   async query(options: AuditQueryOptions = {}): Promise<AuditEntry[]> {
     this.emit('audit-query', options);
+
+    // Generate cache key from options
+    const cacheKey = `query:${JSON.stringify(options)}`;
+
+    // Try cache first
+    if (this.config.enableCache) {
+      const cached = this.queryCache.get(cacheKey);
+      if (cached !== null) {
+        this.emit('cache-hit', { type: 'query', key: cacheKey });
+        return cached;
+      }
+      this.emit('cache-miss', { type: 'query', key: cacheKey });
+    }
 
     let filtered = [...this.entries];
 
@@ -205,7 +225,14 @@ export class AuditLog extends EventEmitter {
     // Pagination
     const offset = options.offset ?? 0;
     const limit = options.limit ?? 100;
-    return filtered.slice(offset, offset + limit);
+    const result = filtered.slice(offset, offset + limit);
+
+    // Cache the result
+    if (this.config.enableCache) {
+      this.queryCache.set(cacheKey, result);
+    }
+
+    return result;
   }
 
   /**
@@ -254,6 +281,11 @@ export class AuditLog extends EventEmitter {
     });
 
     const removed = beforeCount - this.entries.length;
+    
+    // Invalidate cache after cleanup
+    if (this.config.enableCache && removed > 0) {
+      this.queryCache.clear();
+    }
     
     if (removed > 0) {
       this.emit('audit-cleanup', { removed, retentionDays });
@@ -351,5 +383,27 @@ export class AuditLog extends EventEmitter {
    */
   private generateEntryId(): string {
     return `audit-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+  }
+
+  /**
+   * Get cache statistics
+   * @returns Object containing cache stats for queries
+   * @example
+   * const stats = auditLog.getCacheStats();
+   * console.log(`Query cache hit rate: ${stats.hitRate}%`);
+   */
+  getCacheStats(): any {
+    return this.queryCache.getStats();
+  }
+
+  /**
+   * Destroy the audit log and cleanup resources
+   * @example
+   * auditLog.destroy();
+   */
+  destroy(): void {
+    this.queryCache.destroy();
+    this.removeAllListeners();
+    this.streamCallbacks.clear();
   }
 }
