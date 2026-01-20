@@ -12,9 +12,9 @@ describe('StateManager Caching', () => {
       // Create a snapshot
       const snapshot = await manager.createSnapshot({ reason: 'test' });
       
-      // Reset cache stats
-      manager.getCacheStats().snapshots.hits = 0;
-      manager.getCacheStats().snapshots.misses = 0;
+      // Get initial stats
+      const statsBefore = manager.getCacheStats();
+      const hitsBefore = statsBefore.snapshots.hits;
 
       // First retrieval should be a cache hit (it was cached during creation)
       await manager.getSnapshot(snapshot.snapshotId);
@@ -22,8 +22,8 @@ describe('StateManager Caching', () => {
       // Second retrieval should also be a cache hit
       await manager.getSnapshot(snapshot.snapshotId);
       
-      const stats = manager.getCacheStats();
-      expect(stats.snapshots.hits).toBeGreaterThan(0);
+      const statsAfter = manager.getCacheStats();
+      expect(statsAfter.snapshots.hits).toBeGreaterThan(hitsBefore);
       
       manager.destroy();
     });
