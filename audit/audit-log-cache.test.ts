@@ -186,7 +186,6 @@ describe('AuditLog Caching', () => {
       await auditLog.query({ actorId: 'user-1' });
       
       const statsBefore = auditLog.getCacheStats();
-      const hitsBefore = statsBefore.hits;
       
       // Wait for cache to expire
       await new Promise(resolve => setTimeout(resolve, 150));
