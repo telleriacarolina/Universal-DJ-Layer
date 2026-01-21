@@ -1,0 +1,36 @@
+# Source files
+src/
+*.ts
+!*.d.ts
+
+# Example files
+**/example.ts
+**/examples/
+
+# Test files
+**/*.test.ts
+**/*.test.js
+**/*.spec.ts
+**/*.spec.js
+__tests__/
+tests/
+coverage/
+
+# Build files
+tsconfig*.json
+.eslintrc.json
+.prettierrc.json
+.commitlintrc.json
+.releaserc.json
+
+# Development
+.husky/
+.vscode/
+.github/
+docs/CONTRIBUTING.md
+
+# Misc
+*.log
+.DS_Store
+.env
+.env.*
