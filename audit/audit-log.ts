@@ -392,7 +392,7 @@ export class AuditLog extends EventEmitter {
    * const stats = auditLog.getCacheStats();
    * console.log(`Query cache hit rate: ${stats.hitRate}%`);
    */
-  getCacheStats(): any {
+  getCacheStats(): ReturnType<Cache['getStats']> {
     return this.queryCache.getStats();
   }
 
