@@ -114,8 +114,9 @@ describe('StateManager Caching', () => {
       await manager.applyDiscChanges('control-1', { key: 'value1' });
       await manager.listSnapshots(); // First query
       
-      const cacheHits: any[] = [];
-      manager.on('cache-hit', (data) => cacheHits.push(data));
+      type CacheHitEvent = { type: string; [key: string]: unknown };
+      const cacheHits: CacheHitEvent[] = [];
+      manager.on('cache-hit', (data: CacheHitEvent) => cacheHits.push(data));
       
       await manager.listSnapshots(); // Second query - should hit cache
       
