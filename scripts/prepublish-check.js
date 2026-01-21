@@ -43,7 +43,7 @@ const checks = [
         // Run tests - we just need to verify they run, not that all pass
         // (there are 4 pre-existing test failures unrelated to npm config)
         execSync('npm test', { stdio: 'pipe', encoding: 'utf8' });
-        return true; // All tests passed
+        return true; // Tests ran successfully
       } catch (error) {
         // npm test returns non-zero exit code when tests fail
         // Check if tests ran (even with some failures)
