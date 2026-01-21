@@ -11,7 +11,6 @@
 
 import { EventEmitter } from 'events';
 import type { ControlResult } from './dj-engine';
-import type { Disc } from '../discs/feature-disc';
 import { Cache } from './cache';
 
 export interface StateSnapshot {
