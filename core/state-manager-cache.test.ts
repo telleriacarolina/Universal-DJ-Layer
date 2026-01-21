@@ -234,7 +234,6 @@ describe('StateManager Caching', () => {
       
       // Reset stats to verify it's a miss
       const statsBefore = manager.getCacheStats();
-      const hitsBefore = statsBefore.snapshots.hits;
       
       // Should fetch from source (cache expired)
       await manager.getSnapshot(snapshot.snapshotId);
