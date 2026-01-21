@@ -10,7 +10,6 @@
  */
 
 import { EventEmitter } from 'events';
-import type { ControlResult } from './dj-engine';
 import { Cache } from './cache';
 
 export interface StateSnapshot {
