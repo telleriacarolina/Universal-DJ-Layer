@@ -11,7 +11,7 @@ describe('StateManager', () => {
     it('should store and retrieve state', () => {
       const state = { value: 42 };
       stateManager.setState('disc-1', state);
-      
+
       const retrieved = stateManager.getState('disc-1');
       expect(retrieved).toEqual(state);
     });
@@ -29,7 +29,7 @@ describe('StateManager', () => {
 
     it('should maintain max snapshots', () => {
       const smallManager = new StateManager(3);
-      
+
       for (let i = 0; i < 5; i++) {
         smallManager.createSnapshot(`user-${i}`, `Snapshot ${i}`);
       }

@@ -39,7 +39,7 @@ export class ComplianceValidator {
    */
   async validateAll(context: any): Promise<ComplianceResult> {
     const results = await Promise.all(
-      Array.from(this.rules.values()).map(rule => rule.validate(context))
+      Array.from(this.rules.values()).map((rule) => rule.validate(context))
     );
 
     const allViolations: string[] = [];
@@ -53,7 +53,7 @@ export class ComplianceValidator {
     return {
       passed: allViolations.length === 0,
       violations: allViolations,
-      warnings: allWarnings
+      warnings: allWarnings,
     };
   }
 
@@ -62,10 +62,10 @@ export class ComplianceValidator {
    */
   async validateRules(context: any, ruleIds: string[]): Promise<ComplianceResult> {
     const rules = ruleIds
-      .map(id => this.rules.get(id))
+      .map((id) => this.rules.get(id))
       .filter((rule): rule is ComplianceRule => rule !== undefined);
 
-    const results = await Promise.all(rules.map(rule => rule.validate(context)));
+    const results = await Promise.all(rules.map((rule) => rule.validate(context)));
 
     const allViolations: string[] = [];
     const allWarnings: string[] = [];
@@ -78,7 +78,7 @@ export class ComplianceValidator {
     return {
       passed: allViolations.length === 0,
       violations: allViolations,
-      warnings: allWarnings
+      warnings: allWarnings,
     };
   }
 

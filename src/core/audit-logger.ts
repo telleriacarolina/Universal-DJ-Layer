@@ -17,7 +17,7 @@ export class AuditLogger {
   log(entry: Omit<AuditLogEntry, 'timestamp'>): void {
     const logEntry: AuditLogEntry = {
       ...entry,
-      timestamp: new Date()
+      timestamp: new Date(),
     };
 
     this.logs.push(logEntry);
@@ -39,30 +39,28 @@ export class AuditLogger {
    * Get logs for a specific user
    */
   getLogsByUser(userId: string): AuditLogEntry[] {
-    return this.logs.filter(log => log.userId === userId);
+    return this.logs.filter((log) => log.userId === userId);
   }
 
   /**
    * Get logs for a specific disc
    */
   getLogsByDisc(discId: string): AuditLogEntry[] {
-    return this.logs.filter(log => log.discId === discId);
+    return this.logs.filter((log) => log.discId === discId);
   }
 
   /**
    * Get logs within a time range
    */
   getLogsByTimeRange(startTime: Date, endTime: Date): AuditLogEntry[] {
-    return this.logs.filter(log => 
-      log.timestamp >= startTime && log.timestamp <= endTime
-    );
+    return this.logs.filter((log) => log.timestamp >= startTime && log.timestamp <= endTime);
   }
 
   /**
    * Get logs by action type
    */
   getLogsByAction(action: string): AuditLogEntry[] {
-    return this.logs.filter(log => log.action === action);
+    return this.logs.filter((log) => log.action === action);
   }
 
   /**
@@ -86,9 +84,9 @@ export class AuditLogger {
     try {
       const imported = JSON.parse(jsonData);
       if (Array.isArray(imported)) {
-        this.logs = imported.map(entry => ({
+        this.logs = imported.map((entry) => ({
           ...entry,
-          timestamp: new Date(entry.timestamp)
+          timestamp: new Date(entry.timestamp),
         }));
       }
     } catch (error) {
