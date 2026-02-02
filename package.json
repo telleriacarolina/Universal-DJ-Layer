@@ -1,33 +1,88 @@
 {
   "name": "universal-dj-layer",
   "version": "1.0.0",
-  "description": "The DJ Control Layer is a universal, pluggable system that enables safe collaboration, real-time experimentation, and role-based tuning in any host app. Modular “discs” allow reversible changes while preserving core logic, purpose, security, and creator ownership, with full auditing and observability.",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "scripts": {
-    "build": "tsc",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
-  },
+  "description": "A universal, pluggable control layer enabling safe collaboration, real-time experimentation, and role-based tuning in any application",
   "keywords": [
+    "control-layer",
+    "feature-flags",
+    "rbac",
+    "state-management",
+    "audit-logging",
+    "rollback",
+    "experimentation",
+    "a-b-testing",
     "plugin",
     "modular",
-    "role-based",
-    "engine",
-    "disc",
-    "control-layer",
-    "observability",
-    "audit",
-    "access-control",
-    "runtime"
+    "observability"
   ],
-  "author": "telleriacarolina",
-  "license": "ISC",
+  "author": "Carolina Telleria <telleriacarolina@example.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/telleriacarolina/Universal-DJ-Layer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/telleriacarolina/Universal-DJ-Layer/issues"
+  },
+  "homepage": "https://github.com/telleriacarolina/Universal-DJ-Layer#readme",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js"
+    },
+    "./discs": {
+      "types": "./dist/types/discs/index.d.ts",
+      "import": "./dist/esm/discs/index.js",
+      "require": "./dist/cjs/discs/index.js"
+    },
+    "./policies": {
+      "types": "./dist/types/policies/index.d.ts",
+      "import": "./dist/esm/policies/index.js",
+      "require": "./dist/cjs/policies/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "npm run clean && npm run build:cjs && npm run build:esm && npm run build:types && node scripts/add-cjs-package.js",
+    "build:cjs": "tsc -p tsconfig.cjs.json",
+    "build:esm": "tsc -p tsconfig.esm.json",
+    "build:types": "tsc -p tsconfig.types.json",
+    "clean": "rimraf dist",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "size": "size-limit",
+    "size:why": "size-limit --why",
+    "prepublishOnly": "npm run build && node scripts/pre-publish-check.js",
+    "semantic-release": "semantic-release"
+  },
   "devDependencies": {
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/npm": "^12.0.1",
+    "@size-limit/preset-small-lib": "^11.1.6",
     "@types/jest": "^30.0.0",
     "@types/node": "^25.0.9",
     "jest": "^30.2.0",
+    "rimraf": "^6.0.1",
+    "semantic-release": "^24.2.0",
+    "size-limit": "^11.1.6",
     "ts-jest": "^29.4.6",
     "typescript": "^5.9.3"
   }
