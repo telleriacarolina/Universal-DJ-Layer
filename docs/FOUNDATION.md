@@ -40,7 +40,9 @@ import { StateManager } from './core/state-manager';
 const stateManager = new StateManager({
   maxSnapshots: 100,          // Maximum number of snapshots to retain
   enablePersistence: false,    // Enable persistent storage
-  storageBackend: 'memory'     // 'memory' | 'file' | 'database'
+  storageBackend: 'memory',    // 'memory' | 'file' | 'database'
+  enableCache: true,           // Enable caching for performance (default: true)
+  cacheTTL: 300000            // Cache TTL in milliseconds (default: 5 minutes)
 });
 ```
 
@@ -183,7 +185,9 @@ const auditLog = new AuditLog({
   storage: 'memory',               // 'memory' | 'file' | 'database'
   retentionDays: 365,              // Retention period
   includeSensitiveData: false,     // Sanitize sensitive data
-  storagePath: './audit-logs'      // Custom storage path (for file storage)
+  storagePath: './audit-logs',     // Custom storage path (for file storage)
+  enableCache: true,               // Enable caching for performance (default: true)
+  cacheTTL: 60000                  // Cache TTL in milliseconds (default: 1 minute)
 });
 ```
 
@@ -414,6 +418,136 @@ async function applyControlWithAudit(controlId, disc, actor) {
 
 ---
 
+## Performance & Caching
+
+### Caching Layer
+
+Both StateManager and AuditLog include built-in caching capabilities to improve performance for repeated queries and reduce redundant computations.
+
+#### StateManager Caching
+
+StateManager caches:
+- Snapshot retrievals by snapshot ID
+- Filtered query results (by control ID, time range)
+
+```typescript
+// Enable caching with custom TTL
+const stateManager = new StateManager({
+  maxSnapshots: 100,
+  enableCache: true,        // Enable caching (default: true)
+  cacheTTL: 300000          // 5 minutes TTL (default)
+});
+
+// Get cache statistics
+const stats = stateManager.getCacheStats();
+console.log('Snapshot cache hit rate:', stats.snapshots.hitRate);
+console.log('Query cache hit rate:', stats.queries.hitRate);
+
+// Listen for cache events
+stateManager.on('cache-hit', ({ type, key }) => {
+  console.log(`Cache hit for ${type}: ${key}`);
+});
+
+stateManager.on('cache-miss', ({ type, key }) => {
+  console.log(`Cache miss for ${type}: ${key}`);
+});
+```
+
+Cache invalidation happens automatically:
+- When new snapshots are created
+- When state changes are applied
+- When rollbacks occur
+- When control changes are reverted
+- When cleanup removes snapshots
+
+```typescript
+// Manual cache management
+const stats = stateManager.getCacheStats();
+console.log(`Snapshot cache: ${stats.snapshots.size} entries, ${stats.snapshots.hitRate}% hit rate`);
+console.log(`Query cache: ${stats.queries.size} entries, ${stats.queries.hitRate}% hit rate`);
+
+// Cleanup resources when done
+stateManager.destroy();
+```
+
+#### AuditLog Caching
+
+AuditLog caches query results based on filter parameters:
+
+```typescript
+// Enable caching with custom TTL
+const auditLog = new AuditLog({
+  enabled: true,
+  storage: 'memory',
+  enableCache: true,        // Enable caching (default: true)
+  cacheTTL: 60000          // 1 minute TTL (default for audit logs)
+});
+
+// Get cache statistics
+const stats = auditLog.getCacheStats();
+console.log('Query cache hit rate:', stats.hitRate);
+console.log('Cache size:', stats.size);
+
+// Listen for cache events
+auditLog.on('cache-hit', ({ type, key }) => {
+  console.log(`Cache hit for query: ${key}`);
+});
+
+auditLog.on('cache-miss', ({ type, key }) => {
+  console.log(`Cache miss for query: ${key}`);
+});
+```
+
+Cache invalidation happens automatically:
+- When new log entries are added
+- When cleanup removes entries
+
+```typescript
+// The same query will hit cache on subsequent calls
+const entries1 = await auditLog.query({ actorId: 'user-123' }); // Cache miss
+const entries2 = await auditLog.query({ actorId: 'user-123' }); // Cache hit
+
+// Different queries are cached separately
+const entriesA = await auditLog.query({ action: 'apply' });
+const entriesB = await auditLog.query({ action: 'revert' });
+
+// Cleanup resources when done
+auditLog.destroy();
+```
+
+#### Cache Configuration Best Practices
+
+1. **TTL Selection**:
+   - StateManager: 5-15 minutes (default: 5 minutes)
+   - AuditLog: 30-60 seconds (default: 1 minute)
+   - Adjust based on your update frequency
+
+2. **Memory Management**:
+   - Monitor cache sizes in production
+   - Set appropriate TTLs to prevent unbounded growth
+   - Use `destroy()` to cleanup resources when done
+
+3. **Disable When Needed**:
+   ```typescript
+   // Disable caching if not needed
+   const manager = new StateManager({ enableCache: false });
+   const log = new AuditLog({ enableCache: false });
+   ```
+
+4. **Monitor Performance**:
+   ```typescript
+   // Periodically log cache statistics
+   setInterval(() => {
+     const stats = stateManager.getCacheStats();
+     console.log('StateManager cache stats:', {
+       snapshotHitRate: stats.snapshots.hitRate,
+       queryHitRate: stats.queries.hitRate
+     });
+   }, 60000);
+   ```
+
+---
+
 ## Best Practices
 
 ### StateManager
@@ -442,11 +576,20 @@ Both modules include comprehensive test suites with >90% coverage:
 # Run StateManager tests
 npm test -- core/state-manager.test.ts
 
+# Run StateManager caching tests
+npm test -- core/state-manager-cache.test.ts
+
 # Run AuditLog tests
 npm test -- audit/audit-log.test.ts
 
-# Run integration tests
-npm test -- tests/integration/foundation.test.ts
+# Run AuditLog caching tests
+npm test -- audit/audit-log-cache.test.ts
+
+# Run Cache module tests
+npm test -- core/cache.test.ts
+
+# Run all tests
+npm test
 
 # Run with coverage
 npm test -- --coverage
