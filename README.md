@@ -18,11 +18,23 @@ The **Universal DJ Control Layer** is a headless TypeScript framework that allow
 
 ## 📦 Installation
 
+### Quick Install
+
 ```bash
 npm install universal-dj-layer
 # or
 yarn add universal-dj-layer
 ```
+
+### Install from GitHub
+
+```bash
+npm install github:telleriacarolina/Universal-DJ-Layer
+# or with pnpm
+pnpm add github:telleriacarolina/Universal-DJ-Layer
+```
+
+For detailed setup instructions including Homebrew installation and GitHub Copilot CLI setup, see [SETUP.md](./SETUP.md).
 
 ## 🚀 Quick Start
 
@@ -418,6 +430,7 @@ MIT © 2026 Carolina Telleria
 
 ## 🔗 Resources
 
+- [Setup Guide](./SETUP.md) - Installation and environment setup
 - [Foundation Documentation](./docs/FOUNDATION.md) - StateManager & AuditLog guide
 - [Architecture Documentation](./ARCHITECTURE.md)
 - [Integration Guide](./INTEGRATION.md)
