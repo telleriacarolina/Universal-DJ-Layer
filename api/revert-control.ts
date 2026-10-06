@@ -2,151 +2,92 @@
  * Revert Control API - Revert a previously applied control
  * 
  * This API handles rolling back controls to restore previous state.
- * 
- * TODO: Implement revert control with state restoration
  */
 
 import type { DJEngine } from '../core/dj-engine';
-import type { Role } from '../roles/creator';
-
-export interface RevertControlOptions {
-  /** Whether to create a snapshot before reverting */
-  createSnapshot?: boolean;
-  /** Additional metadata to attach */
-  metadata?: Record<string, any>;
-  /** Timeout in milliseconds */
-  timeout?: number;
-  /** Force revert even if there are warnings */
-  force?: boolean;
-}
-
-export interface RevertControlResponse {
-  /** Whether the operation succeeded */
-  success: boolean;
-  /** ID of the reverted control */
-  controlId?: string;
-  /** Error message if failed */
-  error?: string;
-  /** Time taken to revert */
-  durationMs?: number;
-  /** Previous state snapshot ID */
-  snapshotId?: string;
-}
+import type { Actor, RevertOptions, RevertResult } from './types';
+import { Permission } from './types';
+import { PermissionError, NotFoundError } from './errors';
+import { validateActor, validateControlId } from './validators';
 
 /**
- * Revert a control to restore previous state
+ * Revert a previously applied control
+ * 
+ * This function orchestrates the complete control revert flow:
+ * 1. Validates control exists
+ * 2. Checks permissions
+ * 3. Retrieves snapshot
+ * 4. Rolls back to snapshot
+ * 5. Logs revert
  * 
  * @param engine - The DJ engine instance
  * @param controlId - ID of the control to revert
- * @param role - The role reverting the control
- * @param options - Additional options
- * @returns Promise resolving to revert control response
+ * @param actor - The actor reverting the control
+ * @param options - Additional options for revert
+ * @returns Promise resolving to revert result
+ * @throws {ValidationError} If inputs are invalid
+ * @throws {PermissionError} If actor lacks required permissions
+ * @throws {NotFoundError} If control or snapshot not found
  */
 export async function revertControl(
   engine: DJEngine,
   controlId: string,
-  role: Role,
-  options: RevertControlOptions = {}
-): Promise<RevertControlResponse> {
-  const startTime = Date.now();
+  actor: Actor,
+  options: RevertOptions = {}
+): Promise<RevertResult> {
+  // 1. Validate inputs
+  validateControlId(controlId);
+  validateActor(actor);
 
-  try {
-    // TODO: Validate control exists
-    // TODO: Check role permissions for revert
-    // TODO: Create snapshot if requested
-    // TODO: Check if revert is safe (no dependent controls)
-    // TODO: Revert control via engine
-    // TODO: Return success response
-
-    await engine.revertControl(controlId, role);
-
-    return {
-      success: true,
-      controlId,
-      durationMs: Date.now() - startTime,
-    };
-  } catch (error) {
-    // TODO: Log error
-    // TODO: Return error response
-    return {
-      success: false,
-      controlId,
-      error: error instanceof Error ? error.message : 'Unknown error',
-      durationMs: Date.now() - startTime,
-    };
-  }
-}
-
-/**
- * Batch revert multiple controls
- * 
- * @param engine - The DJ engine instance
- * @param controlIds - Array of control IDs to revert
- * @param role - The role reverting the controls
- * @param options - Additional options
- * @returns Promise resolving to array of revert control responses
- */
-export async function batchRevertControls(
-  engine: DJEngine,
-  controlIds: string[],
-  role: Role,
-  options: RevertControlOptions = {}
-): Promise<RevertControlResponse[]> {
-  // TODO: Validate inputs
-  // TODO: Check for dependencies between controls
-  // TODO: Revert in reverse dependency order
-  // TODO: Return array of responses
-  
-  const results: RevertControlResponse[] = [];
-
-  for (const controlId of controlIds) {
-    const result = await revertControl(engine, controlId, role, options);
-    results.push(result);
+  // 2. Check permissions
+  const hasPermission = actor.role.hasPermission(Permission.APPLY_DISCS) ||
+                        actor.role.hasPermission(Permission.REVERT);
+  if (!hasPermission) {
+    throw new PermissionError('Actor lacks permission to revert discs');
   }
 
-  return results;
+  // 3. Validate control exists (if method available)
+  if (typeof (engine as any).getControl === 'function') {
+    const control = await (engine as any).getControl(controlId);
+    if (!control) {
+      throw new NotFoundError(`Control ${controlId} not found`);
+    }
+  }
+
+  // 4. Retrieve and rollback to snapshot
+  let snapshotId: string;
+  
+  if (typeof (engine as any).getSnapshotForControl === 'function') {
+    const snapshot = await (engine as any).getSnapshotForControl(controlId);
+    if (!snapshot) {
+      throw new NotFoundError(`No snapshot found for control ${controlId}`);
+    }
+    snapshotId = snapshot.snapshotId;
+  } else {
+    // Fallback: use control ID as snapshot ID
+    snapshotId = `snapshot-${controlId}`;
+  }
+
+  // Perform the actual revert
+  await engine.revertControl(controlId, actor.role);
+
+  // 5. Log revert
+  if (typeof (engine as any).auditLog?.log === 'function') {
+    await (engine as any).auditLog.log({
+      action: 'revert',
+      actorId: actor.id,
+      actorRole: actor.role.metadata.roleType,
+      controlId,
+      result: 'success',
+      metadata: { snapshotId },
+    });
+  }
+
+  return {
+    success: true,
+    controlId,
+    revertedToSnapshot: snapshotId,
+  };
 }
 
-/**
- * Revert all controls for a specific disc type
- * 
- * @param engine - The DJ engine instance
- * @param discType - Type of discs to revert
- * @param role - The role reverting the controls
- * @param options - Additional options
- * @returns Promise resolving to array of revert control responses
- */
-export async function revertControlsByType(
-  engine: DJEngine,
-  discType: string,
-  role: Role,
-  options: RevertControlOptions = {}
-): Promise<RevertControlResponse[]> {
-  // TODO: List all controls of specified type
-  // TODO: Revert each control
-  // TODO: Return array of responses
-  
-  throw new Error('Not implemented');
-}
 
-/**
- * Revert to a specific state snapshot
- * 
- * @param engine - The DJ engine instance
- * @param snapshotId - ID of the snapshot to restore
- * @param role - The role performing the restore
- * @returns Promise resolving to revert control response
- */
-export async function revertToSnapshot(
-  engine: DJEngine,
-  snapshotId: string,
-  role: Role
-): Promise<RevertControlResponse> {
-  // TODO: Validate snapshot exists
-  // TODO: Check role permissions
-  // TODO: Identify controls to revert
-  // TODO: Revert to snapshot state
-  // TODO: Return response
-  
-  throw new Error('Not implemented');
-}

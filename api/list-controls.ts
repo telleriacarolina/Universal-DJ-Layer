@@ -3,187 +3,118 @@
  * 
  * This API provides various ways to query controls, filter by
  * criteria, and retrieve control metadata.
- * 
- * TODO: Implement list controls with filtering and pagination
  */
 
-import type { DJEngine, ControlResult, ListControlsOptions } from '../core/dj-engine';
-import type { Role } from '../roles/creator';
-
-export interface ListControlsRequest {
-  /** Filter options */
-  filters?: ListControlsOptions;
-  /** Sort field */
-  sortBy?: 'timestamp' | 'controlId' | 'discType';
-  /** Sort direction */
-  sortDirection?: 'asc' | 'desc';
-  /** Pagination: page number (1-based) */
-  page?: number;
-  /** Pagination: items per page */
-  pageSize?: number;
-  /** Include detailed information */
-  includeDetails?: boolean;
-}
-
-export interface ListControlsResponse {
-  /** Array of controls */
-  controls: ControlResult[];
-  /** Total number of controls matching filters */
-  totalCount: number;
-  /** Current page number */
-  page: number;
-  /** Page size */
-  pageSize: number;
-  /** Whether there are more pages */
-  hasMore: boolean;
-}
+import type { DJEngine, ControlResult } from '../core/dj-engine';
+import type { Actor, ListOptions, ControlList, ControlDetail } from './types';
+import { Permission } from './types';
+import { PermissionError } from './errors';
+import { validateActor, canView } from './validators';
 
 /**
  * List controls based on filters and options
  * 
+ * This function orchestrates the complete list flow:
+ * 1. Checks view permission
+ * 2. Gets controls based on filters
+ * 3. Filters by visibility rules
+ * 4. Enriches with metadata
+ * 
  * @param engine - The DJ engine instance
- * @param role - The role listing controls
- * @param request - List controls request
- * @returns Promise resolving to list controls response
+ * @param actor - The actor listing controls
+ * @param options - List options and filters
+ * @returns Promise resolving to control list
+ * @throws {ValidationError} If inputs are invalid
+ * @throws {PermissionError} If actor lacks required permissions
  */
 export async function listControls(
   engine: DJEngine,
-  role: Role,
-  request: ListControlsRequest = {}
-): Promise<ListControlsResponse> {
-  // TODO: Check role has permission to list controls
-  // TODO: Query controls from engine with filters
-  // TODO: Apply sorting
-  // TODO: Apply pagination
-  // TODO: Return paginated response
-
-  try {
-    const controls = await engine.listControls(request.filters);
-
-    // TODO: Implement actual sorting and pagination
-    const page = request.page ?? 1;
-    const pageSize = request.pageSize ?? 20;
-
-    return {
-      controls,
-      totalCount: controls.length,
-      page,
-      pageSize,
-      hasMore: false,
-    };
-  } catch (error) {
-    throw new Error(`Failed to list controls: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  actor: Actor,
+  options: ListOptions = {}
+): Promise<ControlList> {
+  // 1. Check view permission
+  validateActor(actor);
+  const hasPermission = actor.role.hasPermission(Permission.VIEW) ||
+                        actor.role.hasPermission('view-audit') ||
+                        actor.role.hasPermission('full-control');
+  if (!hasPermission) {
+    throw new PermissionError('Actor lacks permission to view controls');
   }
-}
 
-/**
- * Get a specific control by ID
- * 
- * @param engine - The DJ engine instance
- * @param controlId - ID of the control to retrieve
- * @param role - The role retrieving the control
- * @returns Promise resolving to control result
- */
-export async function getControl(
-  engine: DJEngine,
-  controlId: string,
-  role: Role
-): Promise<ControlResult | null> {
-  // TODO: Check role has permission
-  // TODO: Retrieve control from engine
-  // TODO: Return control or null if not found
-  
-  throw new Error('Not implemented');
-}
-
-/**
- * List controls by disc type
- * 
- * @param engine - The DJ engine instance
- * @param discType - Type of discs to filter by
- * @param role - The role listing controls
- * @returns Promise resolving to array of controls
- */
-export async function listControlsByDiscType(
-  engine: DJEngine,
-  discType: string,
-  role: Role
-): Promise<ControlResult[]> {
-  // TODO: Query controls filtered by disc type
-  // TODO: Return filtered controls
-  
-  const response = await listControls(engine, role, {
-    filters: { discType },
+  // 2. Get controls based on filters
+  const controls = await engine.listControls({
+    status: options?.status || 'all',
+    discType: options?.discType,
+    actorId: options?.filterByActor ? actor.id : undefined,
   });
 
-  return response.controls;
+  // 3. Filter by visibility rules - convert ControlResult to ControlDetail
+  const controlDetails: ControlDetail[] = controls.map(control => ({
+    controlId: control.controlId,
+    discId: control.controlId, // Use controlId as fallback
+    discType: (control as any).discType || 'unknown',
+    appliedBy: {
+      id: (control as any).actorId || 'unknown',
+      role: actor.role, // Use current actor's role as fallback
+      name: (control as any).actorName,
+    },
+    appliedAt: control.timestamp,
+    status: control.status === 'success' ? 'active' : 'reverted',
+    affectedSystems: control.affectedSystems || [],
+    canRevert: false, // Will be set below
+    canModify: false, // Will be set below
+  }));
+
+  const visibleControls = controlDetails.filter(control => 
+    canView(actor, control)
+  );
+
+  // 4. Enrich with metadata
+  const enriched = await Promise.all(
+    visibleControls.map(async (control) => {
+      // Check if actor can revert this control
+      let canRevertControl = false;
+      if (typeof (engine as any).canRevert === 'function') {
+        canRevertControl = await (engine as any).canRevert(actor, control.controlId);
+      } else {
+        // Fallback: check if actor has revert permission
+        canRevertControl = actor.role.hasPermission(Permission.REVERT) ||
+                          actor.role.hasPermission('revert-control') ||
+                          control.appliedBy.id === actor.id;
+      }
+
+      // Check if actor can modify this control
+      let canModifyControl = false;
+      if (typeof (engine as any).canModify === 'function') {
+        canModifyControl = await (engine as any).canModify(actor, control.controlId);
+      } else {
+        // Fallback: check if actor has modify permission
+        canModifyControl = actor.role.hasPermission(Permission.MODIFY) ||
+                          actor.role.hasPermission('full-control') ||
+                          control.appliedBy.id === actor.id;
+      }
+
+      return {
+        ...control,
+        canRevert: canRevertControl,
+        canModify: canModifyControl,
+      };
+    })
+  );
+
+  // Apply pagination
+  const page = options?.page || 1;
+  const pageSize = options?.pageSize || 50;
+  const startIndex = (page - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  const paginatedControls = enriched.slice(startIndex, endIndex);
+
+  return {
+    controls: paginatedControls,
+    total: enriched.length,
+    page,
+    pageSize,
+  };
 }
 
-/**
- * List controls by actor/user
- * 
- * @param engine - The DJ engine instance
- * @param actorId - ID of the actor to filter by
- * @param role - The role listing controls
- * @returns Promise resolving to array of controls
- */
-export async function listControlsByActor(
-  engine: DJEngine,
-  actorId: string,
-  role: Role
-): Promise<ControlResult[]> {
-  // TODO: Query controls filtered by actor
-  // TODO: Return filtered controls
-  
-  const response = await listControls(engine, role, {
-    filters: { actorId },
-  });
 
-  return response.controls;
-}
-
-/**
- * Get control statistics
- * 
- * @param engine - The DJ engine instance
- * @param role - The role requesting statistics
- * @returns Promise resolving to control statistics
- */
-export async function getControlStatistics(
-  engine: DJEngine,
-  role: Role
-): Promise<{
-  totalControls: number;
-  activeControls: number;
-  revertedControls: number;
-  byDiscType: Record<string, number>;
-  byActor: Record<string, number>;
-}> {
-  // TODO: Query all controls
-  // TODO: Calculate statistics
-  // TODO: Group by disc type
-  // TODO: Group by actor
-  // TODO: Return statistics
-  
-  throw new Error('Not implemented');
-}
-
-/**
- * Search controls by criteria
- * 
- * @param engine - The DJ engine instance
- * @param searchQuery - Search query string
- * @param role - The role searching controls
- * @returns Promise resolving to matching controls
- */
-export async function searchControls(
-  engine: DJEngine,
-  searchQuery: string,
-  role: Role
-): Promise<ControlResult[]> {
-  // TODO: Parse search query
-  // TODO: Search across control metadata
-  // TODO: Return matching controls
-  
-  throw new Error('Not implemented');
-}
