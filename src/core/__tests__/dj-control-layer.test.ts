@@ -13,25 +13,25 @@ describe('DJControlLayer Integration', () => {
     djLayer = new DJControlLayer({
       enableAuditLog: true,
       maxSnapshots: 10,
-      enableUserIsolation: true
+      enableUserIsolation: true,
     });
 
     adminUser = {
       id: 'admin-1',
       name: 'Admin User',
-      role: Role.ADMIN
+      role: Role.ADMIN,
     };
 
     experimenterUser = {
       id: 'exp-1',
       name: 'Experimenter User',
-      role: Role.EXPERIMENTER
+      role: Role.EXPERIMENTER,
     };
 
     viewerUser = {
       id: 'viewer-1',
       name: 'Viewer User',
-      role: Role.VIEWER
+      role: Role.VIEWER,
     };
   });
 
@@ -46,10 +46,10 @@ describe('DJControlLayer Integration', () => {
 
     it('should prevent non-admin from adding discs', async () => {
       const themeDisc = new ThemeDisc();
-      
-      await expect(
-        djLayer.addDisc(themeDisc, experimenterUser)
-      ).rejects.toThrow('Insufficient permissions');
+
+      await expect(djLayer.addDisc(themeDisc, experimenterUser)).rejects.toThrow(
+        'Insufficient permissions'
+      );
     });
 
     it('should remove a disc successfully', async () => {
@@ -88,9 +88,9 @@ describe('DJControlLayer Integration', () => {
       const themeDisc = new ThemeDisc();
       await djLayer.addDisc(themeDisc, adminUser);
 
-      await expect(
-        djLayer.executeDisc('theme-disc', {}, experimenterUser)
-      ).rejects.toThrow('not enabled');
+      await expect(djLayer.executeDisc('theme-disc', {}, experimenterUser)).rejects.toThrow(
+        'not enabled'
+      );
     });
 
     it('should prevent viewer from executing disc', async () => {
@@ -98,9 +98,9 @@ describe('DJControlLayer Integration', () => {
       await djLayer.addDisc(themeDisc, adminUser);
       await djLayer.enableDisc('theme-disc', experimenterUser);
 
-      await expect(
-        djLayer.executeDisc('theme-disc', {}, viewerUser)
-      ).rejects.toThrow('Insufficient permissions');
+      await expect(djLayer.executeDisc('theme-disc', {}, viewerUser)).rejects.toThrow(
+        'Insufficient permissions'
+      );
     });
   });
 
@@ -109,9 +109,13 @@ describe('DJControlLayer Integration', () => {
       const themeDisc = new ThemeDisc();
       await djLayer.addDisc(themeDisc, adminUser);
 
-      await djLayer.updateDiscConfig('theme-disc', {
-        primaryColor: '#ff0000'
-      }, experimenterUser);
+      await djLayer.updateDiscConfig(
+        'theme-disc',
+        {
+          primaryColor: '#ff0000',
+        },
+        experimenterUser
+      );
 
       const disc = djLayer.getDisc('theme-disc') as ThemeDisc;
       expect(disc.getConfig().primaryColor).toBe('#ff0000');
@@ -135,9 +139,13 @@ describe('DJControlLayer Integration', () => {
 
       const snapshotId = await djLayer.createSnapshot(adminUser, 'Before changes');
 
-      await djLayer.updateDiscConfig('theme-disc', {
-        primaryColor: '#ff0000'
-      }, experimenterUser);
+      await djLayer.updateDiscConfig(
+        'theme-disc',
+        {
+          primaryColor: '#ff0000',
+        },
+        experimenterUser
+      );
 
       let disc = djLayer.getDisc('theme-disc') as ThemeDisc;
       expect(disc.getConfig().primaryColor).toBe('#ff0000');
@@ -151,9 +159,9 @@ describe('DJControlLayer Integration', () => {
     it('should prevent non-admin from rolling back', async () => {
       const snapshotId = await djLayer.createSnapshot(adminUser, 'Test');
 
-      await expect(
-        djLayer.rollbackToSnapshot(snapshotId, experimenterUser)
-      ).rejects.toThrow('Insufficient permissions');
+      await expect(djLayer.rollbackToSnapshot(snapshotId, experimenterUser)).rejects.toThrow(
+        'Insufficient permissions'
+      );
     });
   });
 
@@ -165,8 +173,8 @@ describe('DJControlLayer Integration', () => {
 
       const logs = djLayer.getAuditLogs(adminUser);
       expect(logs.length).toBeGreaterThan(0);
-      expect(logs.some(log => log.action === 'addDisc')).toBe(true);
-      expect(logs.some(log => log.action === 'enableDisc')).toBe(true);
+      expect(logs.some((log) => log.action === 'addDisc')).toBe(true);
+      expect(logs.some((log) => log.action === 'enableDisc')).toBe(true);
     });
 
     it('should filter logs for non-admin users', async () => {
@@ -175,7 +183,7 @@ describe('DJControlLayer Integration', () => {
       await djLayer.enableDisc('theme-disc', experimenterUser);
 
       const logs = djLayer.getAuditLogs(experimenterUser);
-      expect(logs.every(log => log.userId === experimenterUser.id)).toBe(true);
+      expect(logs.every((log) => log.userId === experimenterUser.id)).toBe(true);
     });
   });
 
@@ -188,18 +196,18 @@ describe('DJControlLayer Integration', () => {
         validate: async () => ({
           passed: false,
           violations: ['Not allowed'],
-          warnings: []
-        })
+          warnings: [],
+        }),
       };
 
       const strictLayer = new DJControlLayer({
-        complianceRules: [strictRule]
+        complianceRules: [strictRule],
       });
 
       const themeDisc = new ThemeDisc();
-      await expect(
-        strictLayer.addDisc(themeDisc, adminUser)
-      ).rejects.toThrow('Compliance validation failed');
+      await expect(strictLayer.addDisc(themeDisc, adminUser)).rejects.toThrow(
+        'Compliance validation failed'
+      );
     });
   });
 
@@ -212,8 +220,8 @@ describe('DJControlLayer Integration', () => {
           onBeforeChange: async (context) => {
             hookCalled = true;
             return true;
-          }
-        }
+          },
+        },
       });
 
       const themeDisc = new ThemeDisc();
@@ -225,14 +233,14 @@ describe('DJControlLayer Integration', () => {
     it('should block change when hook returns false', async () => {
       const hookedLayer = new DJControlLayer({
         hooks: {
-          onBeforeChange: async () => false
-        }
+          onBeforeChange: async () => false,
+        },
       });
 
       const themeDisc = new ThemeDisc();
-      await expect(
-        hookedLayer.addDisc(themeDisc, adminUser)
-      ).rejects.toThrow('blocked by integration hook');
+      await expect(hookedLayer.addDisc(themeDisc, adminUser)).rejects.toThrow(
+        'blocked by integration hook'
+      );
     });
 
     it('should call after change hook', async () => {
@@ -242,8 +250,8 @@ describe('DJControlLayer Integration', () => {
         hooks: {
           onAfterChange: async (context) => {
             hookCalled = true;
-          }
-        }
+          },
+        },
       });
 
       const themeDisc = new ThemeDisc();
@@ -262,13 +270,21 @@ describe('DJControlLayer Integration', () => {
       const user1 = { ...experimenterUser, id: 'user-1' };
       const user2 = { ...experimenterUser, id: 'user-2' };
 
-      const result1 = await djLayer.executeDisc('feature-flag-disc', {
-        featureName: 'test-feature'
-      }, user1);
+      const result1 = await djLayer.executeDisc(
+        'feature-flag-disc',
+        {
+          featureName: 'test-feature',
+        },
+        user1
+      );
 
-      const result2 = await djLayer.executeDisc('feature-flag-disc', {
-        featureName: 'test-feature'
-      }, user2);
+      const result2 = await djLayer.executeDisc(
+        'feature-flag-disc',
+        {
+          featureName: 'test-feature',
+        },
+        user2
+      );
 
       expect(result1.checkedBy).toBe('user-1');
       expect(result2.checkedBy).toBe('user-2');
@@ -282,7 +298,7 @@ describe('DJControlLayer Integration', () => {
 
       const state = djLayer.exportState();
       expect(state).toBeTruthy();
-      
+
       const parsed = JSON.parse(state);
       expect(parsed.discs).toBeDefined();
       expect(parsed.snapshots).toBeDefined();

@@ -9,7 +9,7 @@ export class RBACManager {
     [Role.VIEWER, 1],
     [Role.EXPERIMENTER, 2],
     [Role.ADMIN, 3],
-    [Role.OWNER, 4]
+    [Role.OWNER, 4],
   ]);
 
   // All permissions available in the system
@@ -18,7 +18,7 @@ export class RBACManager {
     Permission.WRITE,
     Permission.EXECUTE,
     Permission.DELETE,
-    Permission.CONFIGURE
+    Permission.CONFIGURE,
   ]);
 
   private rolePermissions: Map<Role, Set<Permission>> = new Map([
@@ -27,7 +27,7 @@ export class RBACManager {
     // ADMIN and OWNER have identical permissions by design - both have full system access
     // The distinction is semantic: OWNER represents the creator/ultimate authority
     [Role.ADMIN, new Set(RBACManager.ALL_PERMISSIONS)],
-    [Role.OWNER, new Set(RBACManager.ALL_PERMISSIONS)]
+    [Role.OWNER, new Set(RBACManager.ALL_PERMISSIONS)],
   ]);
 
   /**
@@ -57,7 +57,7 @@ export class RBACManager {
    * Check if a user has all required permissions
    */
   hasAllPermissions(user: User, requiredPermissions: Permission[]): boolean {
-    return requiredPermissions.every(permission => this.hasPermission(user, permission));
+    return requiredPermissions.every((permission) => this.hasPermission(user, permission));
   }
 
   /**

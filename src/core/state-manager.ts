@@ -21,7 +21,7 @@ export class StateManager {
       timestamp: new Date(),
       userId,
       discStates: new Map(this.currentState),
-      description
+      description,
     };
 
     this.snapshots.push(snapshot);
@@ -38,7 +38,7 @@ export class StateManager {
    * Restore state from a snapshot
    */
   rollbackToSnapshot(snapshotId: string): boolean {
-    const snapshot = this.snapshots.find(s => s.id === snapshotId);
+    const snapshot = this.snapshots.find((s) => s.id === snapshotId);
     if (!snapshot) {
       return false;
     }
@@ -51,7 +51,7 @@ export class StateManager {
    * Get a specific snapshot
    */
   getSnapshot(snapshotId: string): StateSnapshot | undefined {
-    return this.snapshots.find(s => s.id === snapshotId);
+    return this.snapshots.find((s) => s.id === snapshotId);
   }
 
   /**
@@ -65,14 +65,14 @@ export class StateManager {
    * Get snapshots by user
    */
   getSnapshotsByUser(userId: string): StateSnapshot[] {
-    return this.snapshots.filter(s => s.userId === userId);
+    return this.snapshots.filter((s) => s.userId === userId);
   }
 
   /**
    * Delete a snapshot
    */
   deleteSnapshot(snapshotId: string): boolean {
-    const index = this.snapshots.findIndex(s => s.id === snapshotId);
+    const index = this.snapshots.findIndex((s) => s.id === snapshotId);
     if (index === -1) {
       return false;
     }

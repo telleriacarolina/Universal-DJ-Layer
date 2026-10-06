@@ -13,14 +13,14 @@ export class FeatureFlagDisc extends Disc {
       description: 'Manages feature flags for controlled rollouts and experimentation',
       author: 'DJ Control Layer',
       requiredRole: Role.EXPERIMENTER,
-      requiredPermissions: [Permission.READ, Permission.WRITE, Permission.EXECUTE]
+      requiredPermissions: [Permission.READ, Permission.WRITE, Permission.EXECUTE],
     };
 
     super(metadata);
 
     // Initialize default config
     this.state.config = {
-      features: {}
+      features: {},
     };
   }
 
@@ -44,7 +44,7 @@ export class FeatureFlagDisc extends Disc {
       feature: featureName,
       enabled: isEnabled,
       checkedBy: context.userId,
-      checkedAt: new Date()
+      checkedAt: new Date(),
     };
   }
 
@@ -88,7 +88,7 @@ export class FeatureFlagDisc extends Disc {
       userWhitelist: options?.userWhitelist || [],
       userBlacklist: options?.userBlacklist || [],
       createdAt: new Date(),
-      createdBy: userId
+      createdBy: userId,
     };
 
     this.updateConfig({ features }, userId);
@@ -125,7 +125,7 @@ export class FeatureFlagDisc extends Disc {
     // Check rollout percentage
     if (feature.rolloutPercentage < 100) {
       const hash = this.hashUserId(userId);
-      return (hash % 100) < feature.rolloutPercentage;
+      return hash % 100 < feature.rolloutPercentage;
     }
 
     return true;
@@ -157,7 +157,7 @@ export class FeatureFlagDisc extends Disc {
     let hash = 0;
     for (let i = 0; i < userId.length; i++) {
       const char = userId.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
+      hash = (hash << 5) - hash + char;
       hash = hash & hash;
     }
     return Math.abs(hash);

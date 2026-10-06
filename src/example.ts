@@ -19,7 +19,7 @@ const loggingDisc: Disc = {
   isTemporary: true,
   execute: () => {
     console.log('  → Enhanced logging is now active!');
-  }
+  },
 };
 
 const debugDisc: Disc = {
@@ -30,7 +30,7 @@ const debugDisc: Disc = {
   isTemporary: true,
   execute: () => {
     console.log('  → Debug mode activated!');
-  }
+  },
 };
 
 const securityDisc: Disc = {
@@ -41,7 +41,7 @@ const securityDisc: Disc = {
   isTemporary: false,
   execute: () => {
     console.log('  → Security enhancements applied!');
-  }
+  },
 };
 
 // Register discs
@@ -87,7 +87,7 @@ console.log('6. Event Log Summary:');
 const logs = engine.getEventLog();
 console.log(`   Total events logged: ${logs.length}`);
 console.log('   Recent events:');
-logs.slice(-5).forEach(log => {
+logs.slice(-5).forEach((log) => {
   console.log(`   - ${log.event} ${log.discName ? `(${log.discName})` : ''} by ${log.actor}`);
 });
 

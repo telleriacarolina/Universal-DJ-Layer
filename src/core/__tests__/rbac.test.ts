@@ -46,7 +46,7 @@ describe('RBACManager', () => {
         id: '1',
         name: 'Custom',
         role: Role.VIEWER,
-        permissions: [Permission.WRITE]
+        permissions: [Permission.WRITE],
       };
       expect(rbacManager.hasPermission(user, Permission.WRITE)).toBe(true);
     });
@@ -77,7 +77,9 @@ describe('RBACManager', () => {
 
     it('should return false when user lacks required permissions', () => {
       const user: User = { id: '1', name: 'Experimenter', role: Role.EXPERIMENTER };
-      expect(rbacManager.canPerformAction(user, Role.EXPERIMENTER, [Permission.DELETE])).toBe(false);
+      expect(rbacManager.canPerformAction(user, Role.EXPERIMENTER, [Permission.DELETE])).toBe(
+        false
+      );
     });
   });
 });
