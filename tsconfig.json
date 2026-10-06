@@ -17,10 +17,20 @@
     "types": ["jest", "node"]
   },
   "include": [
-    "**/*.ts"
+    "index.ts",
+    "core/**/*.ts",
+    "discs/**/*.ts",
+    "roles/**/*.ts",
+    "policies/**/*.ts",
+    "api/**/*.ts",
+    "audit/**/*.ts"
   ],
   "exclude": [
     "node_modules",
-    "dist"
+    "dist",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "src/**/*",
+    "tests/**/*"
   ]
 }

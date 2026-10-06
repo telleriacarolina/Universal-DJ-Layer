@@ -1,0 +1,38 @@
+# Source files
+src/
+*.test.ts
+*.spec.ts
+
+# Config files
+tsconfig*.json
+jest.config.js
+.eslintrc.js
+.prettierrc.js
+.commitlintrc.js
+
+# Development files
+.github/
+.vscode/
+.husky/
+examples/
+docs/
+scripts/
+
+# Build artifacts
+coverage/
+*.log
+.DS_Store
+node_modules/
+
+# Root level files not needed in package
+index.ts
+api/
+audit/
+core/
+discs/
+policies/
+roles/
+tests/
+
+# Keep only dist in the package
+!dist/
