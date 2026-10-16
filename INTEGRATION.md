@@ -2,6 +2,8 @@
 
 This guide explains how to integrate the Universal DJ Control Layer into your host application.
 
+For a concrete end-to-end host application example, see [The-Chatroom Host Integration Blueprint](./docs/THE_CHATROOM_HOST_INTEGRATION.md).
+
 ## Basic Integration
 
 ### Step 1: Install the Package
