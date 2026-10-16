@@ -402,6 +402,7 @@ Built-in guardrails prevent common mistakes:
 - **[Foundation Documentation](./docs/FOUNDATION.md)**: Comprehensive guide to StateManager and AuditLog
 - **[Architecture Overview](./ARCHITECTURE.md)**: System design and architecture
 - **[Integration Guide](./INTEGRATION.md)**: How to integrate with your application
+- **[The-Chatroom Host Integration Blueprint](./docs/THE_CHATROOM_HOST_INTEGRATION.md)**: Concrete runtime control-plane integration plan
 - **[Implementation Summary](./IMPLEMENTATION_SUMMARY.md)**: Current implementation status
 
 ## ✅ What This Is
@@ -434,6 +435,7 @@ MIT © 2026 Carolina Telleria
 - [Foundation Documentation](./docs/FOUNDATION.md) - StateManager & AuditLog guide
 - [Architecture Documentation](./ARCHITECTURE.md)
 - [Integration Guide](./INTEGRATION.md)
+- [The-Chatroom Host Integration Blueprint](./docs/THE_CHATROOM_HOST_INTEGRATION.md)
 - Examples (coming soon)
 - API Reference (coming soon)
 - Community Discord (coming soon)

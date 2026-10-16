@@ -2,6 +2,8 @@
 
 This document provides a detailed overview of the Universal DJ Control Layer architecture.
 
+For a concrete host-app architecture walkthrough using The-Chatroom, see [The-Chatroom Host Integration Blueprint](./docs/THE_CHATROOM_HOST_INTEGRATION.md).
+
 ## High-Level Architecture
 
 ```
