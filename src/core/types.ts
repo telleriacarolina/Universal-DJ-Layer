@@ -136,3 +136,54 @@ export interface DiscState {
   lastModified: Date;
   lastModifiedBy: string;
 }
+
+export type DiscHook = 'message.pre_publish' | 'message.post_publish' | string;
+
+export interface DiscAction {
+  type: 'allow' | 'deny' | 'redact';
+  reason?: string;
+  payload?: Record<string, unknown>;
+}
+
+export interface DiscDecision {
+  allow: boolean;
+  reasons: string[];
+  policyIds: string[];
+  actions: DiscAction[];
+}
+
+export interface DiscContext {
+  hook: DiscHook;
+  roomId?: string;
+  userId?: string;
+  roles?: string[];
+  payload: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  requestId?: string;
+  [key: string]: unknown;
+}
+
+export interface PolicyToggle {
+  discId: string;
+  enabled: boolean;
+  scope: 'global' | 'room' | 'user';
+  roomId?: string;
+  userId?: string;
+}
+
+export interface AuditDecisionEntry {
+  timestamp: string;
+  requestId: string;
+  hook: DiscHook;
+  roomId?: string;
+  userId?: string;
+  decision: DiscDecision;
+}
+
+export interface Disc {
+  id: string;
+  version: string;
+  priority: number;
+  supports: DiscHook[];
+  execute(context: DiscContext): Promise<DiscDecision> | DiscDecision;
+}

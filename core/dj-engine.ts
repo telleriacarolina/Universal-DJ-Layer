@@ -34,6 +34,10 @@ export interface DJEngineConfig {
 }
 
 export interface ControlResult {
+  /** The state before the control was applied */
+  before?: any;
+  /** The state after the control was applied */
+  after?: any;
   /** Unique identifier for this control instance */
   controlId: string;
   /** Timestamp when control was applied */
@@ -43,6 +47,11 @@ export interface ControlResult {
   /** Status of the control operation */
   status: 'success' | 'failed' | 'partial';
 }
+
+export type ControlStateEntry = ControlResult & {
+  before: any;
+  after: any;
+};
 
 export interface PreviewResult {
   /** Whether the control is safe to apply */

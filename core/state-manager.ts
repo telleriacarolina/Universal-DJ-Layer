@@ -74,7 +74,7 @@ export class StateManager extends EventEmitter {
   private currentState: any = {};
   private snapshots: Map<string, StateSnapshot> = new Map();
   private changeHistory: StateChange[] = [];
-  private controlStateMap: Map<string, ControlResult> = new Map();
+  private controlStateMap: Map<string, { before: any; after: any }> = new Map();
   private activeControls: Set<string> = new Set();
   private snapshotCache: Cache<StateSnapshot>;
   private queryCache: Cache<StateSnapshot[]>;
