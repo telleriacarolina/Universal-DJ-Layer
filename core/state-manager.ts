@@ -10,8 +10,7 @@
  */
 
 import { EventEmitter } from 'events';
-import type { ControlResult } from './dj-engine';
-import type { Disc } from '../discs/feature-disc';
+import { Cache } from './cache';
 
 export interface StateSnapshot {
   /** Unique identifier for this snapshot */
@@ -57,6 +56,10 @@ export interface StateManagerConfig {
   enablePersistence?: boolean;
   /** Storage backend (if persistence enabled) */
   storageBackend?: 'memory' | 'file' | 'database';
+  /** Enable caching for snapshots and queries */
+  enableCache?: boolean;
+  /** Cache TTL in milliseconds */
+  cacheTTL?: number;
 }
 
 export interface ChangeDiff {
@@ -71,8 +74,10 @@ export class StateManager extends EventEmitter {
   private currentState: any = {};
   private snapshots: Map<string, StateSnapshot> = new Map();
   private changeHistory: StateChange[] = [];
-  private controlStateMap: Map<string, any> = new Map();
+  private controlStateMap: Map<string, ControlResult> = new Map();
   private activeControls: Set<string> = new Set();
+  private snapshotCache: Cache<StateSnapshot>;
+  private queryCache: Cache<StateSnapshot[]>;
 
   constructor(config: StateManagerConfig = {}) {
     super();
@@ -80,7 +85,19 @@ export class StateManager extends EventEmitter {
       maxSnapshots: config.maxSnapshots ?? 100,
       enablePersistence: config.enablePersistence ?? false,
       storageBackend: config.storageBackend ?? 'memory',
+      enableCache: config.enableCache ?? true,
+      cacheTTL: config.cacheTTL ?? 300000, // 5 minutes default
     };
+
+    // Initialize caches
+    this.snapshotCache = new Cache<StateSnapshot>({
+      defaultTTL: this.config.cacheTTL,
+      enableStats: true,
+    });
+    this.queryCache = new Cache<StateSnapshot[]>({
+      defaultTTL: this.config.cacheTTL,
+      enableStats: true,
+    });
   }
 
   /**
@@ -114,12 +131,21 @@ export class StateManager extends EventEmitter {
 
     this.snapshots.set(snapshotId, snapshot);
     
+    // Invalidate caches on snapshot creation
+    if (this.config.enableCache) {
+      this.snapshotCache.set(snapshotId, snapshot);
+      this.queryCache.clear(); // Invalidate all query caches
+    }
+    
     // Enforce max snapshots limit
     if (this.snapshots.size > this.config.maxSnapshots!) {
       const sortedSnapshots = Array.from(this.snapshots.values())
         .sort((a, b) => a.timestamp - b.timestamp);
       const oldestSnapshot = sortedSnapshots[0];
       this.snapshots.delete(oldestSnapshot.snapshotId);
+      if (this.config.enableCache) {
+        this.snapshotCache.delete(oldestSnapshot.snapshotId);
+      }
       this.emit('snapshot-deleted', oldestSnapshot.snapshotId);
     }
 
@@ -163,6 +189,11 @@ export class StateManager extends EventEmitter {
     this.controlStateMap.set(controlId, { before, after });
     this.activeControls.add(controlId);
 
+    // Invalidate query cache on state change
+    if (this.config.enableCache) {
+      this.queryCache.clear();
+    }
+
     // Create automatic snapshot
     await this.createSnapshot({ controlId, changeType: 'apply' });
 
@@ -198,6 +229,11 @@ export class StateManager extends EventEmitter {
 
     this.changeHistory.push(stateChange);
     
+    // Invalidate caches on rollback
+    if (this.config.enableCache) {
+      this.queryCache.clear();
+    }
+    
     // Create new snapshot of the rolled-back state
     await this.createSnapshot({ rollbackTo: snapshotId });
 
@@ -232,6 +268,11 @@ export class StateManager extends EventEmitter {
     this.controlStateMap.delete(controlId);
     this.activeControls.delete(controlId);
 
+    // Invalidate query cache on revert
+    if (this.config.enableCache) {
+      this.queryCache.clear();
+    }
+
     await this.createSnapshot({ controlId, changeType: 'revert' });
 
     this.emit('state-changed', stateChange);
@@ -253,7 +294,25 @@ export class StateManager extends EventEmitter {
    * @returns StateSnapshot or null if not found
    */
   async getSnapshot(snapshotId: string): Promise<StateSnapshot | null> {
-    return this.snapshots.get(snapshotId) ?? null;
+    // Try cache first
+    if (this.config.enableCache) {
+      const cached = this.snapshotCache.get(snapshotId);
+      if (cached !== null) {
+        this.emit('cache-hit', { type: 'snapshot', key: snapshotId });
+        return cached;
+      }
+      this.emit('cache-miss', { type: 'snapshot', key: snapshotId });
+    }
+
+    // Fetch from source
+    const snapshot = this.snapshots.get(snapshotId) ?? null;
+    
+    // Cache the result
+    if (this.config.enableCache && snapshot !== null) {
+      this.snapshotCache.set(snapshotId, snapshot);
+    }
+
+    return snapshot;
   }
 
   /**
@@ -268,6 +327,20 @@ export class StateManager extends EventEmitter {
     startTime?: number; 
     endTime?: number;
   }): Promise<StateSnapshot[]> {
+    // Generate cache key from filter
+    const cacheKey = `list:${JSON.stringify(filter ?? {})}`;
+
+    // Try cache first
+    if (this.config.enableCache) {
+      const cached = this.queryCache.get(cacheKey);
+      if (cached !== null) {
+        this.emit('cache-hit', { type: 'query', key: cacheKey });
+        return cached;
+      }
+      this.emit('cache-miss', { type: 'query', key: cacheKey });
+    }
+
+    // Perform query
     let snapshots = Array.from(this.snapshots.values());
 
     if (filter) {
@@ -284,7 +357,14 @@ export class StateManager extends EventEmitter {
       }
     }
 
-    return snapshots.sort((a, b) => b.timestamp - a.timestamp);
+    const result = snapshots.sort((a, b) => b.timestamp - a.timestamp);
+
+    // Cache the result
+    if (this.config.enableCache) {
+      this.queryCache.set(cacheKey, result);
+    }
+
+    return result;
   }
 
   /**
@@ -323,9 +403,17 @@ export class StateManager extends EventEmitter {
     for (const snapshot of snapshots) {
       if (snapshot.timestamp < cutoffTime) {
         this.snapshots.delete(snapshot.snapshotId);
+        if (this.config.enableCache) {
+          this.snapshotCache.delete(snapshot.snapshotId);
+        }
         this.emit('snapshot-deleted', snapshot.snapshotId);
         removed++;
       }
+    }
+
+    // Invalidate query cache after cleanup
+    if (this.config.enableCache && removed > 0) {
+      this.queryCache.clear();
     }
 
     return removed;
@@ -338,6 +426,31 @@ export class StateManager extends EventEmitter {
    */
   getControlState(controlId: string): any | null {
     return this.controlStateMap.get(controlId) ?? null;
+  }
+
+  /**
+   * Get cache statistics
+   * @returns Object containing cache stats for snapshots and queries
+   * @example
+   * const stats = stateManager.getCacheStats();
+   * console.log(`Snapshot cache hit rate: ${stats.snapshots.hitRate}%`);
+   */
+  getCacheStats(): { snapshots: any; queries: any } {
+    return {
+      snapshots: this.snapshotCache.getStats(),
+      queries: this.queryCache.getStats(),
+    };
+  }
+
+  /**
+   * Destroy the state manager and cleanup resources
+   * @example
+   * stateManager.destroy();
+   */
+  destroy(): void {
+    this.snapshotCache.destroy();
+    this.queryCache.destroy();
+    this.removeAllListeners();
   }
 
   /**
